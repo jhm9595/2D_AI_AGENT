@@ -1,0 +1,19 @@
+{
+  "name": "pixel-agent-backend",
+  "version": "1.0.0",
+  "description": "2D Pixel Agent Dashboard Backend with WebSocket event publisher",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "mock": "node mock/mockRunner.js"
+  },
+  "dependencies": {
+    "@google/genai": "^2.31.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "open": "^11.0.4",
+    "ws": "^8.18.0"
+  }
+}
