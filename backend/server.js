@@ -12,7 +12,9 @@ import {
   runGeminiAgentTask,
   isRealAgentRunning,
   forceResetAgentSession,
-  handleExecutiveDecisionApplied
+  handleExecutiveDecisionApplied,
+  verifyAndSelectBestModel,
+  getVerifiedWorkingModel
 } from './gemini/geminiAgent.js';
 import { getAgentsRegistry, addCustomAgent, removeCustomAgent } from './agentRegistry.js';
 import { getMeetingState, resolveDecision, resetMeetingState } from './meetingManager.js';
@@ -69,7 +71,7 @@ app.post('/api/meeting/resolve-decision', async (req, res) => {
   res.json({ message: '대표님의 결정이 김수석과 팀원들에게 전달되었습니다.', decision: resolved });
 });
 
-// 🔍 Gemini API 키 유효성 직접 검증 테스트 엔드포인트
+// 🔍 Gemini API 키 유효성 및 모델별 실제 호출 검증 테스트 엔드포인트
 app.post('/api/gemini/test-key', async (req, res) => {
   const apiKey = req.body?.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey || !apiKey.trim()) {
@@ -77,41 +79,29 @@ app.post('/api/gemini/test-key', async (req, res) => {
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: '한국어로 "API 연결 성공"이라고 짧게 답해줘.'
-    });
-
-    const reply = response.text || '';
-    return res.json({
-      success: true,
-      message: 'Gemini API 키가 유효하며 정상적으로 호출되었습니다! (gemini-2.0-flash)',
-      model: 'gemini-2.0-flash',
-      geminiReply: reply.trim()
-    });
-  } catch (err) {
-    try {
-      const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: '한국어로 "API 연결 성공"이라고 짧게 답해줘.'
-      });
+    const probe = await verifyAndSelectBestModel(apiKey.trim());
+    if (probe.success) {
       return res.json({
         success: true,
-        message: 'Gemini API 키가 유효하며 정상적으로 호출되었습니다! (gemini-2.5-flash)',
-        model: 'gemini-2.5-flash',
-        geminiReply: (response.text || '').trim()
+        message: `Gemini API 호출 테스트 통과! (채택된 모델: ${probe.chosenModel})`,
+        model: probe.chosenModel,
+        geminiReply: probe.chosenReply,
+        probeResults: probe.results
       });
-    } catch (err2) {
-      console.error('[Gemini Key Test Error]:', err);
+    } else {
       return res.status(400).json({
         success: false,
-        message: 'Gemini API 호출에 실패했습니다.',
-        error: err.message,
-        status: err.status || err.code
+        message: '모든 후보 모델 호출에 실패했습니다.',
+        probeResults: probe.results
       });
     }
+  } catch (err) {
+    console.error('[Gemini Key Test Error]:', err);
+    return res.status(400).json({
+      success: false,
+      message: 'Gemini API 호출에 실패했습니다.',
+      error: err.message
+    });
   }
 });
 

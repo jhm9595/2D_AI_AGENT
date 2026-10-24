@@ -112,6 +112,13 @@ export default function App() {
     fetchRegistryAgents();
     fetchMeetingState();
     fetchWorkspaceFiles();
+    if (userApiKey && userApiKey.trim()) {
+      fetch('http://localhost:4000/api/gemini/test-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: userApiKey.trim() })
+      }).catch(() => {});
+    }
     const interval = setInterval(() => {
       fetchMeetingState();
       fetchWorkspaceFiles();

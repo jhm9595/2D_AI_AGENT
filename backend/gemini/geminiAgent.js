@@ -18,13 +18,70 @@ export function forceResetAgentSession() {
   activeAgentSession = false;
 }
 
+let verifiedWorkingModel = 'gemini-3.8-flash';
+const CANDIDATE_MODELS = ['gemini-3.8-flash', 'gemini-3.0-flash', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+
+export function getVerifiedWorkingModel() {
+  return verifiedWorkingModel;
+}
+
 /**
- * Gemini API 호출 헬퍼 (실시간 1초 단위 하트비트 + 모델 폴백: gemini-2.0-flash -> gemini-2.5-flash -> gemini-1.5-flash)
+ * 🔍 각 후보 모델을 실제로 호출 테스트하여 현재 API 키에서 정상 작동하는 최적 모델을 찾고 고정
+ */
+export async function verifyAndSelectBestModel(apiKey) {
+  const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+  const results = [];
+  let chosenModel = null;
+  let chosenReply = '';
+
+  const ordered = [
+    verifiedWorkingModel,
+    ...CANDIDATE_MODELS.filter((m) => m !== verifiedWorkingModel)
+  ];
+
+  for (const model of ordered) {
+    const t0 = Date.now();
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: '한국어로 "API 연결 성공"이라고 짧게 답해줘.'
+      });
+      const elapsedMs = Date.now() - t0;
+      const reply = (response?.text || '').trim();
+      results.push({ model, ok: true, elapsedMs, reply });
+      if (!chosenModel) {
+        chosenModel = model;
+        chosenReply = reply;
+        verifiedWorkingModel = model;
+      }
+      console.log(`[ModelProbe] ✅ ${model} SUCCESS (${elapsedMs}ms): "${reply}"`);
+      break; // 1순위 성공 모델 즉시 채택
+    } catch (err) {
+      const elapsedMs = Date.now() - t0;
+      const errMsg = err.message ? err.message.slice(0, 160) : 'Error';
+      results.push({ model, ok: false, elapsedMs, error: errMsg });
+      console.warn(`[ModelProbe] ❌ ${model} FAILED (${elapsedMs}ms): ${errMsg}`);
+    }
+  }
+
+  return {
+    success: Boolean(chosenModel),
+    chosenModel,
+    chosenReply,
+    results
+  };
+}
+
+/**
+ * Gemini API 호출 헬퍼 (검증된 1순위 모델 gemini-3.8-flash 우선 호출 + 실시간 1초 단위 하트비트 + 자동 폴백)
  */
 async function callGeminiWithFallback(apiKey, contents, systemInstruction, meta = {}) {
   const { agentId = 'agent-lead', agentName = '에이전트', taskLabel = 'AI 추론 및 코드 생성' } = meta;
   const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
-  const models = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+  const models = [
+    verifiedWorkingModel,
+    ...CANDIDATE_MODELS.filter((m) => m !== verifiedWorkingModel)
+  ];
   let lastError = null;
   const promptChars = typeof contents === 'string' ? contents.length : JSON.stringify(contents).length;
 
@@ -71,6 +128,7 @@ async function callGeminiWithFallback(apiKey, contents, systemInstruction, meta 
       clearInterval(heartbeatTimer);
 
       if (response && response.text) {
+        verifiedWorkingModel = model;
         const totalSec = ((Date.now() - startTs) / 1000).toFixed(1);
         const outLen = response.text.trim().length;
         eventBroker.publish('agent_thinking', {
