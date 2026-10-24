@@ -25,7 +25,9 @@ import {
   CORE_SYSTEM_ID,
   isForbiddenSystemPath,
   listProjectsWithArtifacts,
-  ensureProjectsDir
+  ensureProjectsDir,
+  createProject,
+  deleteProject
 } from './projectManager.js';
 
 dotenv.config();
@@ -172,6 +174,38 @@ app.get('/api/projects', async (req, res) => {
   }
 });
 
+// 🚀 신규 프로젝트 생성 API
+app.post('/api/projects', async (req, res) => {
+  try {
+    const { id, name, description, category, template } = req.body || {};
+    const created = await createProject({ id, name, description, category, template });
+    res.json({
+      success: true,
+      message: `프로젝트 [${created.name}] 가 성공적으로 생성되었습니다.`,
+      project: created
+    });
+  } catch (err) {
+    console.error('[Create Project Error]:', err);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// 🗑️ 프로젝트 삭제 API (코어시스템 보호)
+app.delete('/api/projects/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await deleteProject(id);
+    res.json({
+      success: true,
+      message: `프로젝트 [${id}] 가 삭제되었습니다.`,
+      result
+    });
+  } catch (err) {
+    console.error('[Delete Project Error]:', err);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
 // Agent Registry API
 app.get('/api/agents/list', (req, res) => {
   res.json({ agents: getAgentsRegistry() });
@@ -217,17 +251,17 @@ app.delete('/api/agents/:id', (req, res) => {
 
 // Trigger Real or Autonomous Agent Task
 app.post('/api/agent/run', async (req, res) => {
-  const { prompt, apiKey, assignedAgentId } = req.body;
+  const { prompt, apiKey, assignedAgentId, targetProjectId } = req.body;
   if (!prompt || !prompt.trim()) {
     return res.status(400).json({ error: '요청 프롬프트가 비어있습니다.' });
   }
 
-  runGeminiAgentTask(prompt.trim(), apiKey, assignedAgentId)
+  runGeminiAgentTask(prompt.trim(), apiKey, assignedAgentId, targetProjectId)
     .catch((err) => {
       console.error('[Backend] Agent Task Execution failed:', err);
     });
 
-  res.json({ message: '에이전트 작업 지시 완료', prompt });
+  res.json({ message: '에이전트 작업 지시 완료', prompt, targetProjectId });
 });
 
 // Workspace artifacts endpoints

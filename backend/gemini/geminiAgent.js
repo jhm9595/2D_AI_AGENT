@@ -3,7 +3,7 @@ import { eventBroker } from '../eventBroker.js';
 import { realAgentTools } from './tools.js';
 import { getAgentsRegistry } from '../agentRegistry.js';
 import { startMeeting, addDialogue, requestDecision, setMeetingProjectId } from '../meetingManager.js';
-import { upsertProjectMeta, listProjectsWithArtifacts } from '../projectManager.js';
+import { upsertProjectMeta, listProjectsWithArtifacts, createProject, CORE_SYSTEM_ID } from '../projectManager.js';
 
 let activeAgentSession = false;
 
@@ -258,7 +258,7 @@ export async function handleExecutiveDecisionApplied(decision, clientApiKey) {
 /**
  * 👑 메인 엔트리포인트
  */
-export async function runGeminiAgentTask(userPrompt, clientApiKey, assignedAgentId) {
+export async function runGeminiAgentTask(userPrompt, clientApiKey, assignedAgentId, targetProjectId) {
   activeAgentSession = true;
   const apiKey = clientApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
@@ -284,7 +284,7 @@ export async function runGeminiAgentTask(userPrompt, clientApiKey, assignedAgent
   }
 
   try {
-    await runEnterpriseDAGWorkflowLoop(userPrompt, initialAgent, leadAgent, registry, apiKey);
+    await runEnterpriseDAGWorkflowLoop(userPrompt, initialAgent, leadAgent, registry, apiKey, { targetProjectId });
     eventBroker.updateWorkflowStatus({
       running: false,
       stage: '✅ Final Delivery Report 완료 (User Validation 대기)',
@@ -455,6 +455,7 @@ async function runEnterpriseDAGWorkflowLoop(
       wsFiles: wsInfoInit.files,
       projects: wsInfoInit.projects || [],
       targetFilename,
+      targetProjectId: options.targetProjectId || null,
       initInspection,
       executionHistory,
       sharedContracts,
@@ -789,6 +790,7 @@ async function runPmRouterTriageAndWbs({
   wsFiles,
   projects = [],
   targetFilename,
+  targetProjectId,
   initInspection,
   executionHistory,
   sharedContracts,
@@ -807,10 +809,18 @@ async function runPmRouterTriageAndWbs({
   eventBroker.agentThinking(leadAgent.id, `[PM Router Triage] 프로젝트 식별 및 요청 유형(New Feature vs Minor Change vs Urgent Hotfix) 분석 중...`);
   await sleep(500);
 
-  // 기본값 설정 (기존 프로젝트 우선 매칭)
-  let projectId = projects.length > 0 ? projects[0].id : 'ksool_game';
-  let projectName = projects.length > 0 ? projects[0].name : '한국의 술 도감 게임';
-  let projectDescription = projects.length > 0 ? projects[0].description : '한국 전통주 및 지역 특산주 도감 수집 및 퀴즈 2D 인터랙티브 웹 게임';
+  // 기본값 설정: 대표자가 지정한 프로젝트가 있으면 최우선, 없으면 일반 프로젝트(non-core) 우선, 그 외 기본값
+  let targetProjObj = null;
+  if (targetProjectId) {
+    targetProjObj = projects.find((p) => p.id === targetProjectId);
+  }
+  if (!targetProjObj) {
+    targetProjObj = projects.find((p) => p.id !== CORE_SYSTEM_ID) || projects[0] || null;
+  }
+
+  let projectId = targetProjObj ? targetProjObj.id : 'ksool_game';
+  let projectName = targetProjObj ? targetProjObj.name : '한국의 술 도감 게임';
+  let projectDescription = targetProjObj ? targetProjObj.description : '한국 전통주 및 지역 특산주 도감 수집 및 퀴즈 2D 인터랙티브 웹 게임';
   let isNewProject = false;
   let resolvedTarget = targetFilename || 'index.html';
   let requestType = 'NEW_FEATURE_SPEC'; // 'NEW_FEATURE_SPEC' | 'MINOR_CHANGE' | 'URGENT_HOTFIX'
@@ -852,6 +862,7 @@ ${JSON.stringify(existingProjectBriefs, null, 2)}
 
 ### 입력 정보:
 - **사용자 입력(User Input)**: "${userPrompt}"
+- **지정된 대상 프로젝트 힌트(Target Project Hint)**: ${targetProjectId ? `"${targetProjectId}" (대표자가 이 프로젝트를 명시적으로 선택함)` : '없음 (요청 내용 기반 자동 판별 필요)'}
 - **현재 워크스페이스 파일 목록**: ${JSON.stringify(wsFiles)}
 - **타깃 파일 후보**: ${targetFilename || '자동 식별'}
 - **기존 프로젝트 정적 진단 결과**: ${initInspection ? JSON.stringify({ valid: initInspection.valid, issues: initInspection.issues }) : '없음'}
@@ -860,10 +871,17 @@ ${JSON.stringify(existingProjectBriefs, null, 2)}
 ### 🧭 PM Agent (Router) 핵심 지침:
 1. **[프로젝트 자동 식별 및 분류 (Project Auto-Triage)]**:
    - 🌟 **코어시스템 (core_system / 코어시스템) 분기 규칙**:
-     사용자의 요청이 **우리가 현재 사용하는 2D AI 에이전트 프로그램 자체**(예: 2D 오피스 화면에 커피머신/가구/휴게실 추가, 대시보드 UI/스타일 변경, 에이전트 추가/관리 기능 확장, 백엔드 API/이벤트 추가, 회의록 다운로드 등)를 개선하거나 수정하는 작업일 때는 **무조건 projectId: "core_system", projectName: "코어시스템"으로 분류**하세요!
+     사용자의 요청이 **우리가 현재 사용하는 2D AI 에이전트 프로그램 자체**(예: 2D 오피스 화면에 커피머신/가구/휴게실 추가, 대시보드 UI/스타일 변경, 에이전트 추가/관리 기능 확장, 백엔드 API/이벤트 추가, 회의록 다운로드 등)이거나 대상 프로젝트 힌트가 "core_system"일 때는 **무조건 projectId: "core_system", projectName: "코어시스템"으로 분류**하세요!
      이 경우 targetFilename은 수정 대상 실제 소스코드 경로(예: "frontend/src/App.tsx", "frontend/src/canvas/OfficeMap.ts", "backend/server.js" 등)로 지정하세요.
-   - **일반 프로젝트 분기 규칙**:
-     독립적인 외부 게임, 웹앱, 서비스(예: "한국의 술 도감 게임", "2D 러닝 게임", "계산기", "투두앱" 등)를 제작/수정하는 작업일 때는 해당 프로젝트 id (예: "ksool_game") 또는 신규 snake_case id를 지정하세요. (기본 targetFilename: "index.html")
+   - 🚀 **신규 프로젝트 생성 규칙 (isNewProject: true)**:
+     사용자의 요청이 기존 프로젝트 목록에 없는 새로운 게임, 웹앱, 서비스, 도구를 만들어달라는 요청인 경우:
+     • "isNewProject": true
+     • "projectId": "신규_영문_snake_case_id" (예: "flappy_bird", "stock_sim", "todo_app", "calculator")
+     • "projectName": "신규 프로젝트 한글 이름" (예: "플래피 버드 게임")
+     • "projectDescription": "프로젝트 핵심 목표 및 설명"
+     • "targetFilename": "index.html"
+   - **기존 일반 프로젝트 분기 규칙**:
+     등록된 기존 프로젝트(예: "ksool_game" 등)에 대한 작업이거나 대상 프로젝트 힌트가 주어진 경우 해당 projectId를 유지하고 isNewProject: false로 지정하세요. (기본 targetFilename: "index.html")
 
 2. **[Request Triage: Impact / Scope / Type]**:
    - \`"NEW_FEATURE_SPEC"\`: 신규 프로젝트 생성, 신규 기능 추가, 기획/스펙 변경 ➔ **Planner Agent (PRD)** 및 **Security Agent [Gate 1: Threat Modeling]**을 거침!
@@ -954,6 +972,21 @@ ${JSON.stringify(existingProjectBriefs, null, 2)}
       }
     } catch (err) {
       console.warn('[PM Router Triage Fallback]:', err.message);
+    }
+  }
+
+  // 신규 프로젝트 생성 요청이거나 아직 프로젝트 폴더가 없는 경우 신규 프로젝트 자동 초기화
+  if ((isNewProject || !projects.some((p) => p.id === projectId)) && projectId !== CORE_SYSTEM_ID) {
+    try {
+      await createProject({
+        id: projectId,
+        name: projectName,
+        description: projectDescription,
+        category: 'web',
+        template: 'webapp'
+      });
+    } catch (e) {
+      // 이미 폴더가 있거나 생성 중 경미한 에러는 통과
     }
   }
 

@@ -28,7 +28,10 @@ import {
   FileText,
   Database,
   FolderGit2,
-  ChevronRight
+  ChevronRight,
+  FolderPlus,
+  Plus,
+  Trash2
 } from 'lucide-react';
 
 export interface ProjectArtifactFile {
@@ -86,6 +89,18 @@ export default function App() {
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [selectedFileContent, setSelectedFileContent] = useState<{ name: string; content: string; fullPath?: string } | null>(null);
+
+  // 신규 프로젝트 생성 모달 및 대상 프로젝트 선택 상태
+  const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [targetProjectId, setTargetProjectId] = useState<string>(''); // '' = 자동 감지
+  const [newProjectForm, setNewProjectForm] = useState({
+    id: '',
+    name: '',
+    description: '',
+    category: 'game',
+    template: 'canvas_game'
+  });
 
   // 실시간 대화형 앱/게임 플레이어 모달 (iframe 프리뷰)
   const [activePlayUrl, setActivePlayUrl] = useState<string | null>(null);
@@ -266,6 +281,71 @@ export default function App() {
     setActivePlayTitle(title || relPathOrName);
   };
 
+  const handleOpenNewProjectModal = () => {
+    setNewProjectForm({
+      id: '',
+      name: '',
+      description: '',
+      category: 'game',
+      template: 'canvas_game'
+    });
+    setIsNewProjectModalOpen(true);
+  };
+
+  const handleCreateProjectSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectForm.name.trim()) {
+      alert('프로젝트 명칭을 입력해 주세요.');
+      return;
+    }
+    setCreatingProject(true);
+    try {
+      const res = await fetch('http://localhost:4000/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newProjectForm)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || '프로젝트 생성에 실패했습니다.');
+      }
+      setIsNewProjectModalOpen(false);
+      await fetchWorkspaceFiles();
+      if (data.project?.id) {
+        setSelectedProjectId(data.project.id);
+        setTargetProjectId(data.project.id);
+      }
+    } catch (err: any) {
+      alert(`오류: ${err.message}`);
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
+  const handleDeleteProject = async (projId: string, projName: string) => {
+    if (!window.confirm(`[${projName}] 프로젝트를 정말 삭제하시겠습니까?\n모든 산출물과 문서 파일이 영구 삭제됩니다.`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`http://localhost:4000/api/projects/${projId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || '프로젝트 삭제에 실패했습니다.');
+      }
+      if (selectedProjectId === projId) {
+        setSelectedProjectId('all');
+      }
+      if (targetProjectId === projId) {
+        setTargetProjectId('');
+      }
+      await fetchWorkspaceFiles();
+    } catch (err: any) {
+      alert(`삭제 오류: ${err.message}`);
+    }
+  };
+
   const handleRunAgentTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!promptInput.trim()) return;
@@ -278,7 +358,8 @@ export default function App() {
         body: JSON.stringify({
           prompt: promptInput,
           apiKey: userApiKey || undefined,
-          assignedAgentId
+          assignedAgentId,
+          targetProjectId: targetProjectId || undefined
         })
       });
       setPromptInput('');
@@ -482,26 +563,57 @@ export default function App() {
 
           {/* 에이전트 직접 지시 컨트롤러 */}
           <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 shadow-xl flex flex-col gap-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-indigo-400" />
                 <span className="text-xs font-bold text-slate-200">
                   대표자 업무 지시 (CEO Task Dispatcher)
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400">총괄 지시 대상:</span>
-                <select
-                  value={assignedAgentId}
-                  onChange={(e) => setAssignedAgentId(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-indigo-300 font-bold focus:outline-none focus:border-indigo-500 cursor-pointer"
-                >
-                  {registryAgents.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({a.role})
-                    </option>
-                  ))}
-                </select>
+              <div className="flex items-center flex-wrap gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-400">대상 프로젝트:</span>
+                  <select
+                    value={targetProjectId}
+                    onChange={(e) => {
+                      if (e.target.value === '__NEW_PROJECT__') {
+                        handleOpenNewProjectModal();
+                      } else {
+                        setTargetProjectId(e.target.value);
+                        if (e.target.value && e.target.value !== '') {
+                          setSelectedProjectId(e.target.value);
+                        }
+                      }
+                    }}
+                    className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-500 cursor-pointer max-w-[200px] truncate"
+                  >
+                    <option value="">🎯 자동 감지 (PM Router)</option>
+                    {projects.map((p) => {
+                      const isCore = p.id === 'core_system' || (p as any).isCoreSystem;
+                      return (
+                        <option key={p.id} value={p.id}>
+                          {isCore ? '⚡ [코어시스템]' : `📁 ${p.name || p.id}`}
+                        </option>
+                      );
+                    })}
+                    <option value="__NEW_PROJECT__">➕ [+ 새 프로젝트 추가...]</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-400">총괄 지시 대상:</span>
+                  <select
+                    value={assignedAgentId}
+                    onChange={(e) => setAssignedAgentId(e.target.value)}
+                    className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-indigo-300 font-bold focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                    {registryAgents.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({a.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -551,6 +663,14 @@ export default function App() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={handleOpenNewProjectModal}
+                  className="flex items-center gap-1 text-[11px] text-emerald-300 hover:text-white bg-emerald-950/70 hover:bg-emerald-900/80 px-2.5 py-1 rounded border border-emerald-700/60 transition cursor-pointer font-bold shadow-sm shadow-emerald-950/50"
+                  title="새로운 프로젝트 추가하기"
+                >
+                  <FolderPlus className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>+ 새 프로젝트</span>
+                </button>
                 <button
                   onClick={() => handleOpenFolder(selectedProjectId !== 'all' ? selectedProjectId : undefined)}
                   className="flex items-center gap-1 text-[11px] text-indigo-300 hover:text-white bg-indigo-950/60 hover:bg-indigo-900/80 px-2.5 py-1 rounded border border-indigo-700/60 transition cursor-pointer"
@@ -609,6 +729,14 @@ export default function App() {
                   </button>
                 );
               })}
+              <button
+                onClick={handleOpenNewProjectModal}
+                className="px-2.5 py-1 rounded-md text-[11px] font-bold text-emerald-400 hover:text-emerald-200 bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-800/60 transition shrink-0 flex items-center gap-1 cursor-pointer"
+                title="신규 프로젝트 추가"
+              >
+                <Plus className="w-3 h-3" />
+                <span>프로젝트 추가</span>
+              </button>
             </div>
 
             {/* 프로젝트 목록 및 하위 문서/앱 뷰어 */}
@@ -648,18 +776,48 @@ export default function App() {
                             {proj.description}
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleOpenFolder(proj.id)}
-                          className={`text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 shrink-0 cursor-pointer ${
-                            isCore
-                              ? 'border-purple-700 text-purple-300 hover:text-white bg-purple-950/80 hover:bg-purple-900'
-                              : 'border-slate-700/80 text-slate-400 hover:text-amber-300 bg-slate-900'
-                          }`}
-                          title={isCore ? '2D_AI_AGENT 프로그램 소스코드 전체 폴더 열기' : '이 프로젝트 폴더만 탐색기로 열기'}
-                        >
-                          <FolderOpen className={`w-3 h-3 ${isCore ? 'text-purple-400' : 'text-amber-400'}`} />
-                          <span>{isCore ? '소스코드 폴더 열기' : '폴더 열기'}</span>
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => {
+                              setTargetProjectId(proj.id);
+                              setSelectedProjectId(proj.id);
+                              setPromptInput(`[${proj.name}] `);
+                              const inputEl = document.querySelector('input[type="text"]') as HTMLInputElement;
+                              if (inputEl) inputEl.focus();
+                            }}
+                            className={`text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 shrink-0 cursor-pointer ${
+                              isCore
+                                ? 'border-purple-600/70 text-purple-300 hover:text-white bg-purple-900/40 hover:bg-purple-900/70'
+                                : 'border-indigo-700/70 text-indigo-300 hover:text-white bg-indigo-950/60 hover:bg-indigo-900/70'
+                            }`}
+                            title="이 프로젝트에 업무 지시하기"
+                          >
+                            <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                            <span>작업 지시</span>
+                          </button>
+                          <button
+                            onClick={() => handleOpenFolder(proj.id)}
+                            className={`text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 shrink-0 cursor-pointer ${
+                              isCore
+                                ? 'border-purple-700 text-purple-300 hover:text-white bg-purple-950/80 hover:bg-purple-900'
+                                : 'border-slate-700/80 text-slate-400 hover:text-amber-300 bg-slate-900'
+                            }`}
+                            title={isCore ? '2D_AI_AGENT 프로그램 소스코드 전체 폴더 열기' : '이 프로젝트 폴더만 탐색기로 열기'}
+                          >
+                            <FolderOpen className={`w-3 h-3 ${isCore ? 'text-purple-400' : 'text-amber-400'}`} />
+                            <span>{isCore ? '소스코드 폴더' : '폴더 열기'}</span>
+                          </button>
+                          {!isCore && (
+                            <button
+                              onClick={() => handleDeleteProject(proj.id, proj.name)}
+                              className="text-[10px] px-1.5 py-0.5 rounded border border-red-900/60 text-red-400 hover:text-white hover:bg-red-900/60 bg-red-950/30 transition flex items-center gap-1 cursor-pointer"
+                              title="프로젝트 삭제"
+                            >
+                              <Trash2 className="w-2.5 h-2.5 text-red-400" />
+                              <span>삭제</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* 1. 🎮 실행 웹앱 / 게임 (Apps) */}
@@ -893,6 +1051,181 @@ export default function App() {
             <pre className="p-5 font-mono text-xs text-slate-200 overflow-auto flex-1 bg-slate-950 select-text leading-relaxed whitespace-pre-wrap">
               {selectedFileContent.content}
             </pre>
+          </div>
+        </div>
+      )}
+
+      {/* 🚀 신규 프로젝트 생성 모달 */}
+      {isNewProjectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
+            {/* 모달 헤더 */}
+            <div className="bg-slate-950 px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400">
+                  <FolderPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">신규 프로젝트 추가</h3>
+                  <p className="text-[11px] text-slate-400">
+                    새로운 애플리케이션 또는 게임 프로젝트 워크스페이스를 즉시 생성합니다.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsNewProjectModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 모달 폼 */}
+            <form onSubmit={handleCreateProjectSubmit} className="p-6 flex flex-col gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  프로젝트 명칭 <span className="text-emerald-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newProjectForm.name}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const autoSlug = val
+                      .toLowerCase()
+                      .replace(/[^a-z0-9\s_-]/g, '')
+                      .replace(/\s+/g, '_');
+                    setNewProjectForm((prev) => ({
+                      ...prev,
+                      name: val,
+                      id: prev.id === '' || prev.id === autoSlug.slice(0, -1) ? autoSlug : prev.id
+                    }));
+                  }}
+                  placeholder="예: 2D 벽돌깨기 게임, 주식 모의투자 앱, 할일 매니저"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    프로젝트 식별자 (ID) <span className="text-slate-500 font-normal">(영문/숫자/_)</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newProjectForm.id}
+                    onChange={(e) =>
+                      setNewProjectForm({
+                        ...newProjectForm,
+                        id: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '_')
+                      })
+                    }
+                    placeholder="예: breakout_game"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2 text-xs font-mono text-emerald-300 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    분류 카테고리
+                  </label>
+                  <select
+                    value={newProjectForm.category}
+                    onChange={(e) => setNewProjectForm({ ...newProjectForm, category: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                  >
+                    <option value="game">🎮 2D 웹 게임</option>
+                    <option value="web">🌐 웹 서비스/앱</option>
+                    <option value="tool">🛠️ 유틸리티/데이터 도구</option>
+                    <option value="etc">📦 기타 프로젝트</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  초기 스타터 템플릿
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setNewProjectForm({ ...newProjectForm, template: 'canvas_game' })}
+                    className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition cursor-pointer ${
+                      newProjectForm.template === 'canvas_game'
+                        ? 'border-emerald-500 bg-emerald-950/40 text-white shadow-sm shadow-emerald-950/60'
+                        : 'border-slate-800 bg-slate-950/60 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <span>🎮</span> 2D Canvas 게임
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      HTML5 Canvas 렌더 루프 및 인터랙션 스타터
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setNewProjectForm({ ...newProjectForm, template: 'webapp' })}
+                    className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition cursor-pointer ${
+                      newProjectForm.template === 'webapp'
+                        ? 'border-emerald-500 bg-emerald-950/40 text-white shadow-sm shadow-emerald-950/60'
+                        : 'border-slate-800 bg-slate-950/60 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="text-xs font-bold flex items-center gap-1.5">
+                      <span>🌐</span> 인터랙티브 웹앱
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      반응형 대시보드 카드 및 컴포넌트 스타터
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  프로젝트 개요 및 목적
+                </label>
+                <textarea
+                  rows={2}
+                  value={newProjectForm.description}
+                  onChange={(e) => setNewProjectForm({ ...newProjectForm, description: e.target.value })}
+                  placeholder="에이전트들이 구현해야 할 프로젝트의 핵심 목표나 요구사항을 간단히 적어주세요."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 resize-none"
+                />
+              </div>
+
+              {/* 액션 버튼 */}
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsNewProjectModalOpen(false)}
+                  className="px-4 py-2 text-xs text-slate-400 hover:text-white transition cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingProject || !newProjectForm.name.trim()}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-md shadow-emerald-600/30 transition cursor-pointer"
+                >
+                  {creatingProject ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>생성 중...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FolderPlus className="w-3.5 h-3.5" />
+                      <span>프로젝트 생성</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

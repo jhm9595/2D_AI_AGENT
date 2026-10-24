@@ -499,3 +499,300 @@ export async function upsertProjectMeta(projectId, metaUpdates) {
   await fs.promises.writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
   return meta;
 }
+
+/**
+ * 🚀 신규 프로젝트 생성 (폴더, 메타데이터, 스타터 템플릿, 초기 기획문서 자동 초기화)
+ */
+export async function createProject({ id, name, description, category = 'web', template = 'webapp' }) {
+  ensureProjectsDir();
+
+  let cleanId = (id || name || 'new_project')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_-]/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  if (!cleanId) cleanId = `project_${Date.now()}`;
+
+  if (cleanId === CORE_SYSTEM_ID) {
+    throw new Error('코어시스템(core_system) ID로는 생성할 수 없습니다.');
+  }
+
+  const pPath = path.join(PROJECTS_DIR, cleanId);
+  if (fs.existsSync(pPath)) {
+    throw new Error(`이미 존재하는 프로젝트 ID입니다: "${cleanId}"`);
+  }
+
+  const pDocs = path.join(pPath, 'docs');
+  const pData = path.join(pPath, 'data');
+  fs.mkdirSync(pDocs, { recursive: true });
+  fs.mkdirSync(pData, { recursive: true });
+
+  const projectName = name ? name.trim() : cleanId;
+  const projectDesc = description ? description.trim() : `${projectName} 프로젝트`;
+
+  const meta = {
+    id: cleanId,
+    name: projectName,
+    description: projectDesc,
+    category,
+    entrypoint: 'index.html',
+    isCoreSystem: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  await fs.promises.writeFile(path.join(pPath, 'project.json'), JSON.stringify(meta, null, 2), 'utf-8');
+
+  // 스타터 템플릿 HTML 생성
+  let starterHtml = '';
+  if (template === 'canvas_game') {
+    starterHtml = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${projectName}</title>
+  <style>
+    body {
+      margin: 0;
+      background: #090d16;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    .header { text-align: center; margin-bottom: 16px; }
+    h1 { margin: 0 0 6px 0; font-size: 24px; color: #38bdf8; }
+    p { margin: 0; color: #94a3b8; font-size: 13px; }
+    canvas {
+      background: #111827;
+      border: 2px solid #0284c7;
+      border-radius: 12px;
+      box-shadow: 0 16px 36px rgba(0,0,0,0.6);
+    }
+    .controls {
+      margin-top: 14px;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      background: #0284c7;
+      color: white;
+      border: none;
+      padding: 8px 18px;
+      font-size: 13px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #0369a1; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🎮 ${projectName}</h1>
+    <p>${projectDesc}</p>
+  </div>
+  <canvas id="gameCanvas" width="640" height="400"></canvas>
+  <div class="controls">
+    <button onclick="toggleGame()">게임 시작 / 일시정지</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    let running = false;
+    let ball = { x: 320, y: 200, dx: 4, dy: 3, r: 16, color: '#38bdf8' };
+
+    function render() {
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < canvas.width; i += 40) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+      }
+      for (let j = 0; j < canvas.height; j += 40) {
+        ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(canvas.width, j); ctx.stroke();
+      }
+
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+      ctx.fillStyle = ball.color;
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = '#38bdf8';
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.closePath();
+
+      if (running) {
+        ball.x += ball.dx;
+        ball.y += ball.dy;
+        if (ball.x + ball.r > canvas.width || ball.x - ball.r < 0) ball.dx = -ball.dx;
+        if (ball.y + ball.r > canvas.height || ball.y - ball.r < 0) ball.dy = -ball.dy;
+        requestAnimationFrame(render);
+      } else {
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = '15px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('2D 에이전트에게 게임 로직 및 그래픽 추가를 지시하세요!', canvas.width / 2, canvas.height / 2);
+      }
+    }
+
+    function toggleGame() {
+      running = !running;
+      if (running) render();
+    }
+    render();
+  </script>
+</body>
+</html>`;
+  } else {
+    starterHtml = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${projectName}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 40px 20px;
+      background: #090d16;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 85vh;
+    }
+    .card {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 16px;
+      padding: 36px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #38bdf8;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 16px;
+    }
+    h1 { margin: 0 0 10px 0; color: #f8fafc; font-size: 26px; }
+    p { margin: 0 0 24px 0; color: #94a3b8; font-size: 14px; line-height: 1.6; }
+    .box {
+      background: #1e293b;
+      border: 1px dashed #475569;
+      border-radius: 10px;
+      padding: 20px;
+      color: #cbd5e1;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">🚀 신규 프로젝트 준비 완료</div>
+    <h1>${projectName}</h1>
+    <p>${projectDesc}</p>
+    <div class="box">
+      <strong>✨ 2D AI 에이전트와 함께 만들어가세요!</strong><br/>
+      대표자 업무 지시 창에서 <em>"${projectName}에 필요한 기능 만들어줘"</em>라고 요청하시면 8인의 전문 에이전트가 즉시 개발을 진행합니다.
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  await fs.promises.writeFile(path.join(pPath, 'index.html'), starterHtml, 'utf-8');
+
+  // docs/PRD.md
+  const prdContent = `# 📋 제품 기획서 (PRD): ${projectName}
+
+- **프로젝트 식별자**: \`${cleanId}\`
+- **카테고리**: ${category}
+- **생성 일시**: ${new Date().toLocaleString('ko-KR')}
+- **총괄 기획**: 윤기획 (Planner Agent)
+
+---
+## 1. 프로젝트 개요
+${projectDesc}
+
+## 2. 주요 기능 및 로드맵
+- [ ] 핵심 사용자 인터페이스(UI) 구성
+- [ ] 데이터 저장 및 비즈니스 인터랙션 구현
+- [ ] 보안 취약점 점검 및 E2E 테스트 통과
+`;
+  await fs.promises.writeFile(path.join(pDocs, 'PRD.md'), prdContent, 'utf-8');
+
+  // docs/WBS_PLAN.md
+  const wbsContent = `# 🗂️ WBS 작업 분해 및 DAG 일정: ${projectName}
+
+- **총괄 PM**: 김수석
+- **프로젝트 ID**: \`${cleanId}\`
+
+## 1. 마일스톤
+1. [x] 프로젝트 초기화 및 워크스페이스 구조 생성
+2. [ ] [Planner] 상세 기능 스펙 및 Acceptance Criteria 정의
+3. [ ] [FE/BE] 프론트엔드/백엔드 로직 구현
+4. [ ] [Security/QA] Gate 1~4 보안 및 기능 테스트 검증
+`;
+  await fs.promises.writeFile(path.join(pDocs, 'WBS_PLAN.md'), wbsContent, 'utf-8');
+
+  // public 미러 복사
+  try {
+    const pubProjectDir = path.join(PUBLIC_DIR, 'projects', cleanId);
+    if (!fs.existsSync(pubProjectDir)) fs.mkdirSync(pubProjectDir, { recursive: true });
+    await fs.promises.writeFile(path.join(pubProjectDir, 'index.html'), starterHtml, 'utf-8');
+  } catch (e) {}
+
+  return meta;
+}
+
+/**
+ * 🗑️ 프로젝트 삭제 (코어시스템 절대 보호)
+ */
+export async function deleteProject(projectId) {
+  ensureProjectsDir();
+  const safeProjectId = path.basename(projectId);
+
+  if (safeProjectId === CORE_SYSTEM_ID) {
+    throw new Error('코어시스템(core_system)은 보호된 시스템이므로 삭제할 수 없습니다.');
+  }
+
+  const pPath = path.join(PROJECTS_DIR, safeProjectId);
+  if (!fs.existsSync(pPath)) {
+    throw new Error(`존재하지 않는 프로젝트입니다: ${safeProjectId}`);
+  }
+
+  await fs.promises.rm(pPath, { recursive: true, force: true });
+
+  try {
+    const pubDir = path.join(PUBLIC_DIR, 'projects', safeProjectId);
+    if (fs.existsSync(pubDir)) {
+      await fs.promises.rm(pubDir, { recursive: true, force: true });
+    }
+  } catch (e) {}
+
+  return { success: true, deletedId: safeProjectId };
+}
+
