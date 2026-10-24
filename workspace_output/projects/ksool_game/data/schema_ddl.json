@@ -1,0 +1,39 @@
+{
+  "tables": {
+    "traditional_drinks": {
+      "description": "한국 전통주 마스터 테이블",
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(32)",
+          "primaryKey": true
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(100)",
+          "nullable": false
+        },
+        {
+          "name": "category",
+          "type": "VARCHAR(50)",
+          "description": "탁주 | 약주 | 청주 | 증류식소주"
+        },
+        {
+          "name": "alcohol",
+          "type": "DECIMAL(3,1)",
+          "unit": "%"
+        },
+        {
+          "name": "region",
+          "type": "VARCHAR(50)",
+          "description": "생산지"
+        },
+        {
+          "name": "description",
+          "type": "TEXT"
+        }
+      ]
+    }
+  },
+  "sampleSeedCount": 12
+}

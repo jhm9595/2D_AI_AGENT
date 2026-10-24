@@ -2,7 +2,8 @@ import { GoogleGenAI } from '@google/genai';
 import { eventBroker } from '../eventBroker.js';
 import { realAgentTools } from './tools.js';
 import { getAgentsRegistry } from '../agentRegistry.js';
-import { startMeeting, addDialogue, requestDecision } from '../meetingManager.js';
+import { startMeeting, addDialogue, requestDecision, setMeetingProjectId } from '../meetingManager.js';
+import { upsertProjectMeta, listProjectsWithArtifacts } from '../projectManager.js';
 
 let activeAgentSession = false;
 
@@ -383,6 +384,10 @@ async function runEnterpriseDAGWorkflowLoop(
 
   const executionHistory = [];
   const sharedContracts = {
+    projectId: null,
+    projectName: null,
+    projectDescription: null,
+    isNewProject: false,
     triageType: null, // 'NEW_FEATURE_SPEC' | 'MINOR_CHANGE' | 'URGENT_HOTFIX'
     prdSpec: null,
     securityDirectives: null,
@@ -448,6 +453,7 @@ async function runEnterpriseDAGWorkflowLoop(
       securityAgent,
       userPrompt,
       wsFiles: wsInfoInit.files,
+      projects: wsInfoInit.projects || [],
       targetFilename,
       initInspection,
       executionHistory,
@@ -631,7 +637,8 @@ async function runEnterpriseDAGWorkflowLoop(
       let gate2Report = await executeSecurityGate2SAST({
         securityAgent,
         infraAgent,
-        targetFilename
+        targetFilename,
+        sharedContracts
       });
       executionHistory.push(gate2Report);
 
@@ -664,7 +671,8 @@ async function runEnterpriseDAGWorkflowLoop(
         gate2Report = await executeSecurityGate2SAST({
           securityAgent,
           infraAgent,
-          targetFilename
+          targetFilename,
+          sharedContracts
         });
         executionHistory.push(gate2Report);
       }
@@ -711,7 +719,8 @@ async function runEnterpriseDAGWorkflowLoop(
     // =========================================================================
     const gate4Report = await executeSecurityGate4DAST({
       securityAgent,
-      targetFilename
+      targetFilename,
+      sharedContracts
     });
     executionHistory.push(gate4Report);
 
@@ -750,13 +759,13 @@ async function runEnterpriseDAGWorkflowLoop(
   });
   executionHistory.push(deployReport);
 
-  const finalCeoReport = `대표님, 요청하신 "${userPrompt}" 업무가 [PM Router Triage: ${sharedContracts.triageType}] ➔ [WBS & DAG 개발] ➔ [Gate 2: SAST/SCA] ➔ [Staging Build] ➔ [Gate 3: QA E2E/Regression] ➔ [Gate 4: DAST Security Sign-off] ➔ [Infra Zero-Downtime Production Deployment] 전 과정을 통과하여 최종 완료되었습니다.`;
+  const finalCeoReport = `대표님, 요청하신 "${userPrompt}" 업무가 [프로젝트: ${sharedContracts.projectName || '기본'}] 관할 하에 [PM Router Triage: ${sharedContracts.triageType}] ➔ [Planner PRD & WBS 수립] ➔ [Gate 2: SAST/SCA] ➔ [Staging Build] ➔ [Gate 3: QA E2E/Regression] ➔ [Gate 4: DAST Security Sign-off] ➔ [Infra Zero-Downtime Deployment] 전 과정을 통과하여 산출물 보관함에 체계적으로 분류 저장되었습니다.`;
 
   addDialogue({
     agentId: leadAgent.id,
     agentName: leadAgent.name,
     role: leadAgent.role,
-    message: `👑 [Final Delivery Report ──► User Validation]\n${finalCeoReport}\n• Triage 경로: ${sharedContracts.triageType}\n• 최종 프로덕션 산출물: ${targetFilename}\n• 검증 통과 TC: ${testCases.join(' | ')}`,
+    message: `👑 [Final Delivery Report ──► User Validation]\n${finalCeoReport}\n• 프로젝트: [${sharedContracts.projectName || '프로젝트'}] (\`projects/${sharedContracts.projectId || 'ksool_game'}/\`)\n• 보관된 산출물:\n  - 🎮 실행 앱: \`index.html\`\n  - 📋 기획/WBS/보안/QA 문서: \`docs/\` (PRD.md, WBS_PLAN.md, SECURITY_AUDIT.md, QA_REPORT.md)\n  - 🗄️ 데이터 스키마: \`data/schema_ddl.json\`\n• 검증 통과 TC: ${testCases.join(' | ')}`,
     type: 'proposal'
   });
 
@@ -778,6 +787,7 @@ async function runPmRouterTriageAndWbs({
   securityAgent,
   userPrompt,
   wsFiles,
+  projects = [],
   targetFilename,
   initInspection,
   executionHistory,
@@ -789,15 +799,20 @@ async function runPmRouterTriageAndWbs({
   eventBroker.agentMove(leadAgent.id, MEETING_SEATS[0], 'walk');
   eventBroker.updateWorkflowStatus({
     running: true,
-    stage: '🧭 [PM Agent (Router)] Request Triage (Impact / Scope / Type 분류 중)',
+    stage: '🧭 [PM Agent (Router)] Request Triage & 프로젝트 식별 중',
     activeAgentId: leadAgent.id,
     activeAgentName: leadAgent.name,
-    detail: `사용자 요청("${userPrompt.slice(0, 35)}")의 Impact / Scope / Type 분석 및 라우팅 경로 결정 중`
+    detail: `사용자 요청("${userPrompt.slice(0, 35)}")의 프로젝트 식별 및 Scope/Type 라우팅 경로 결정 중`
   });
-  eventBroker.agentThinking(leadAgent.id, `[PM Router Triage] 요청 유형(New Feature vs Minor Change vs Urgent Hotfix) 분석 중...`);
+  eventBroker.agentThinking(leadAgent.id, `[PM Router Triage] 프로젝트 식별 및 요청 유형(New Feature vs Minor Change vs Urgent Hotfix) 분석 중...`);
   await sleep(500);
 
-  let resolvedTarget = targetFilename || (wsFiles.length > 0 ? wsFiles[0].name : 'index.html');
+  // 기본값 설정 (기존 프로젝트 우선 매칭)
+  let projectId = projects.length > 0 ? projects[0].id : 'ksool_game';
+  let projectName = projects.length > 0 ? projects[0].name : '한국의 술 도감 게임';
+  let projectDescription = projects.length > 0 ? projects[0].description : '한국 전통주 및 지역 특산주 도감 수집 및 퀴즈 2D 인터랙티브 웹 게임';
+  let isNewProject = false;
+  let resolvedTarget = targetFilename || 'index.html';
   let requestType = 'NEW_FEATURE_SPEC'; // 'NEW_FEATURE_SPEC' | 'MINOR_CHANGE' | 'URGENT_HOTFIX'
   let triageReason = '신규 기능 또는 스펙 변경 요청으로 판단되어 Planner(PRD) 및 Gate 1(Threat Modeling) 경로로 라우팅합니다.';
   let prdSummary = `"${userPrompt}" 구현을 위한 PRD, User Stories 및 Acceptance Criteria`;
@@ -817,51 +832,70 @@ async function runPmRouterTriageAndWbs({
   let assignedTasks = [
     {
       agentId: 'agent-frontend',
-      instruction: `"${resolvedTarget}"에 "${userPrompt}" 요구사항을 완벽히 구현하세요.`,
+      instruction: `"${userPrompt}" 요구사항을 완벽히 구현하세요.`,
       stepCriteria: '요구사항 및 UI/로직 완벽 반영'
     }
   ];
 
   if (apiKey) {
     try {
+      const existingProjectBriefs = projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description
+      }));
+
       const routerPrompt = `${leadAgent.systemPrompt}
+
+### 🗂️ 현재 오피스에 등록된 프로젝트 목록:
+${JSON.stringify(existingProjectBriefs, null, 2)}
 
 ### 입력 정보:
 - **사용자 입력(User Input)**: "${userPrompt}"
 - **현재 워크스페이스 파일 목록**: ${JSON.stringify(wsFiles)}
-- **타깃 파일 후보**: ${targetFilename || '자동 식별 필요 (기존 파일 수정 요청이면 기존 파일 선택, 신규 제작이면 새 .html 파일명 지정)'}
+- **타깃 파일 후보**: ${targetFilename || '자동 식별'}
 - **기존 프로젝트 정적 진단 결과**: ${initInspection ? JSON.stringify({ valid: initInspection.valid, issues: initInspection.issues }) : '없음'}
 
 ---
-### 🧭 다이어그램 프로세스에 따른 필수 수행 지침:
-1. **[PM Agent (Router) — Request Triage: Impact / Scope / Type]**:
-   사용자 요청을 분석하여 \`requestType\`을 아래 3가지 중 하나로 정확히 분류하세요:
-   - \`"NEW_FEATURE_SPEC"\`: 새로운 프로젝트 생성, 신규 기능 추가, 기획/스펙 변경 ➔ **Planner Agent (PRD)** 및 **Security Agent [Gate 1: Threat Modeling]**을 거침!
+### 🧭 PM Agent (Router) 핵심 지침:
+1. **[프로젝트 자동 식별 및 분류 (Project Auto-Triage)]**:
+   - 사용자 지시가 기존 프로젝트(예: 한국의 술 도감 등)와 관련된 것인지, 아니면 새로운 프로젝트 제작 요청인지 판단하세요.
+   - \`"projectId"\`: 기존 프로젝트 작업이면 기존 ID (예: "ksool_game"), 완전히 새로운 프로젝트면 영문 소문자 snake_case 식별자 (예: "runner_action_game", "brick_breaker", "todo_app", "portfolio_web")
+   - \`"projectName"\`: 프로젝트 한글 명칭 (예: "한국의 술 도감 게임", "2D 러닝 액션 게임")
+   - \`"projectDescription"\`: 프로젝트 핵심 설명
+   - \`"isNewProject"\`: 신규 프로젝트 여부 (true / false)
+   - \`"targetFilename"\`: 프로젝트 메인 실행 파일 (기본값: "index.html")
+
+2. **[Request Triage: Impact / Scope / Type]**:
+   - \`"NEW_FEATURE_SPEC"\`: 신규 프로젝트 생성, 신규 기능 추가, 기획/스펙 변경 ➔ **Planner Agent (PRD)** 및 **Security Agent [Gate 1: Threat Modeling]**을 거침!
    - \`"MINOR_CHANGE"\`: 단순 색상/폰트/문구/레이아웃 미세 조정 등 경미한 코드/UI 수정 ➔ **Planner 및 Gate 1을 생략**하고 즉시 PM WBS Breakdown으로 직행!
    - \`"URGENT_HOTFIX"\`: 버그 수정, 에러 패치, 안 눌리는 버튼 수리 등 긴급 핫픽스 ➔ **Planner 및 Gate 1을 우회(Fast-track)**하여 즉시 PM WBS Breakdown으로 직행!
 
-2. **[Planner Agent & Security Gate 1 (NEW_FEATURE_SPEC일 때만 활성)]**:
-   - \`prdSummary\`: Planner(윤기획)의 PRD / User Stories / Acceptance Criteria 요약
+3. **[Planner Agent & Security Gate 1 (NEW_FEATURE_SPEC일 때만 활성)]**:
+   - \`prdSummary\`: Planner(윤기획)의 PRD / User Stories / Acceptance Criteria 상세 요약
    - \`gate1Feedback\` & \`securityDirectives\`: Security(정보안)의 [Gate 1: Threat Modeling] 결과 및 개발팀에 주입할 보안 지침
 
-3. **[PM Agent — WBS Breakdown / Ticket Spec / DAG Dependency]**:
-   - \`dagBranches\`: 이번 작업에 필요한 DAG 분기 여부(\`dbMigration\`, \`apiCoreLogic\`, \`infraProvisioning\`)를 표시하세요.
-   - \`assignedTasks\`: 실제로 투입할 에이전트 티켓 배열을 구성하세요.
-     • DB/스키마/시드데이터 작업이 필요하면 \`"agent-dba"\` 포함
-     • 백엔드/코어 비즈니스 로직/API Spec이 필요하면 \`"agent-backend"\` 포함
-     • UI/클라이언트 컴포넌트 및 최종 화면 통합은 \`"agent-frontend"\` 포함
-     • 💡 주의: 불필요하게 모든 에이전트를 다 부르지 말고, \`MINOR_CHANGE\`나 \`URGENT_HOTFIX\`면 꼭 필요한 담당자(예: \`agent-frontend\` 단독 또는 \`agent-backend\`+\`agent-frontend\`)만 배정하여 속도를 높이세요!
-   - 기술/디자인 결정은 PM이 자율적으로 내리되, 오직 대표님의 선택 없이는 아예 진행이 불가능한 사안만 \`"needsUserDecision": true\`로 두세요.
+4. **[PM Agent — WBS Breakdown / Ticket Spec / DAG Dependency]**:
+   - \`dagBranches\`: 이번 작업에 필요한 DAG 분기 여부(\`dbMigration\`, \`apiCoreLogic\`, \`infraProvisioning\`)
+   - \`assignedTasks\`: 실제로 투입할 에이전트 티켓 배열
+     • DB/스키마/시드데이터 필요 시 \`"agent-dba"\`
+     • 백엔드/코어 비즈니스 로직 필요 시 \`"agent-backend"\`
+     • UI/클라이언트 컴포넌트 필요 시 \`"agent-frontend"\`
+   - 오직 대표님의 선택 없이는 아예 진행이 불가능한 사안만 \`"needsUserDecision": true\`
 
 반드시 아래 JSON 형식으로만 응답하세요:
 {
-  "targetFilename": "대상 파일명.html",
+  "projectId": "ksool_game | 새프로젝트id",
+  "projectName": "프로젝트 한글 이름",
+  "projectDescription": "프로젝트 핵심 설명",
+  "isNewProject": false,
+  "targetFilename": "index.html",
   "requestType": "NEW_FEATURE_SPEC | MINOR_CHANGE | URGENT_HOTFIX",
-  "triageReason": "PM Router가 해당 유형(Impact/Scope/Type)으로 분류한 근거",
-  "prdSummary": "Planner Agent의 PRD / User Stories 요약 (NEW_FEATURE_SPEC일 때 상세 작성)",
+  "triageReason": "PM Router 분류 근거",
+  "prdSummary": "Planner Agent의 PRD / User Stories 요약",
   "gate1Passed": true,
   "gate1Feedback": "Gate 1 Threat Modeling 검토 결과",
-  "securityDirectives": "주입할 보안 지침 (Security Directives Injected)",
+  "securityDirectives": "주입할 보안 지침",
   "wbsSummary": "PM의 WBS Breakdown 및 DAG 의존성 설계 요약",
   "dagBranches": {
     "dbMigration": false,
@@ -884,10 +918,16 @@ async function runPmRouterTriageAndWbs({
       const raw = await callGeminiWithFallback(apiKey, routerPrompt, undefined, {
         agentId: leadAgent.id,
         agentName: leadAgent.name,
-        taskLabel: `[PM Router Triage & WBS] Impact/Scope/Type 분류 및 DAG 티켓 설계`
+        taskLabel: `[PM Router Triage & WBS] 프로젝트 식별 및 DAG 티켓 설계`
       });
       const parsed = parseJsonSafely(raw);
       if (parsed) {
+        if (parsed.projectId) {
+          projectId = parsed.projectId.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+        }
+        if (parsed.projectName) projectName = parsed.projectName;
+        if (parsed.projectDescription) projectDescription = parsed.projectDescription;
+        if (typeof parsed.isNewProject === 'boolean') isNewProject = parsed.isNewProject;
         if (parsed.targetFilename) resolvedTarget = parsed.targetFilename;
         if (['NEW_FEATURE_SPEC', 'MINOR_CHANGE', 'URGENT_HOTFIX'].includes(parsed.requestType)) {
           requestType = parsed.requestType;
@@ -918,6 +958,19 @@ async function runPmRouterTriageAndWbs({
     }
   }
 
+  // 프로젝트 메타데이터 저장 & 회의록 연동
+  await upsertProjectMeta(projectId, {
+    id: projectId,
+    name: projectName,
+    description: projectDescription,
+    entrypoint: resolvedTarget
+  });
+  setMeetingProjectId(projectId);
+
+  sharedContracts.projectId = projectId;
+  sharedContracts.projectName = projectName;
+  sharedContracts.projectDescription = projectDescription;
+  sharedContracts.isNewProject = isNewProject;
   sharedContracts.triageType = requestType;
   sharedContracts.securityDirectives = securityDirectives;
   sharedContracts.wbsTicketSpec = wbsSummary;
@@ -934,10 +987,51 @@ async function runPmRouterTriageAndWbs({
     agentId: leadAgent.id,
     agentName: leadAgent.name,
     role: leadAgent.role,
-    message: `🧭 [PM Agent (Router) — Request Triage 완료]\n• 분류 결과: ${triageBadge}\n• 대상 파일: "${resolvedTarget}"\n• Triage 판단 근거: ${triageReason}`,
+    message: `🧭 [PM Agent (Router) — Request Triage 완료]\n• 대상 프로젝트: [${projectName}] (\`${projectId}\`)\n• 신규 여부: ${isNewProject ? '신규 생성 프로젝트' : '기존 프로젝트 유지보수'}\n• 분류 결과: ${triageBadge}\n• 진입점: "${resolvedTarget}"\n• Triage 판단 근거: ${triageReason}`,
     type: 'proposal'
   });
   await sleep(600);
+
+  // PM의 WBS 계획서 문서(docs/WBS_PLAN.md) 저장
+  const wbsDoc = `# 🗂️ WBS 작업 분해 및 DAG 의존성 계획서: ${projectName}
+
+- **총괄 PM**: 김수석 (PM / Technical Lead)
+- **프로젝트 식별자**: \`${projectId}\`
+- **작성일시**: ${new Date().toLocaleString('ko-KR')}
+- **분류(Triage)**: ${requestType} (${triageReason})
+
+---
+## 1. DAG 파이프라인 흐름
+\`\`\`text
+[PM Router Triage] ➔ [Planner PRD] ➔ [Security Gate 1: Threat Modeling]
+       │
+       ▼
+ [PM WBS 수립] ➔ [DBA 스키마 DDL] ➔ [BE 비즈니스/API] ➔ [FE 컴포넌트]
+       │
+       ▼
+ [Security Gate 2: SAST] ➔ [Staging Build] ➔ [QA Gate 3: E2E/회귀]
+       │
+       ▼
+ [Security Gate 4: DAST 모의침투] ➔ [Infra Production Release]
+\`\`\`
+
+## 2. WBS 세부 작업 패키지 (Work Packages)
+${assignedTasks.map((t, idx) => `### WP-${idx + 1}: [${t.agentId}]
+- **지시 내용**: ${t.instruction}
+- **완료 기준**: ${t.stepCriteria}
+`).join('\n')}
+
+## 3. 테스트 케이스 및 검증 지표
+${testCases.map((tc, idx) => `- **TC-${idx + 1}**: ${tc}`).join('\n')}
+
+## 4. 품질 및 보안 게이트웨이 기준
+${acceptanceCriteria.map((ac, idx) => `- **기준 ${idx + 1}**: ${ac}`).join('\n')}
+`;
+  await realAgentTools.write_file({
+    filename: 'docs/WBS_PLAN.md',
+    projectId,
+    content: wbsDoc
+  });
 
   // 2) 분기 처리: 오직 [New Feature / Spec Change]일 때만 Planner Agent -> Security Agent (Gate 1) 실행!
   if (requestType === 'NEW_FEATURE_SPEC') {
@@ -945,23 +1039,59 @@ async function runPmRouterTriageAndWbs({
     eventBroker.agentMove(plannerAgent.id, { deskIndex: plannerAgent.deskIndex }, 'walk');
     eventBroker.updateWorkflowStatus({
       running: true,
-      stage: '📝 [Planner Agent] PRD / User Stories / Criteria 작성 중',
+      stage: `📝 [Planner Agent] "${projectName}" PRD / User Stories 작성 중`,
       activeAgentId: plannerAgent.id,
       activeAgentName: plannerAgent.name,
-      detail: `"${resolvedTarget}" PRD 및 User Stories 정의 중`
+      detail: `[${projectId}] PRD 및 User Stories 정의 중`
     });
     await sleep(600);
 
     sharedContracts.prdSpec = prdSummary;
+
+    // Planner가 작성한 docs/PRD.md 문서 실시간 저장
+    const prdDoc = `# 📋 제품 요구사항 정의서 (PRD): ${projectName}
+
+- **프로젝트 식별자**: \`${projectId}\`
+- **기획 책임자**: 윤기획 (Planner Agent)
+- **작성일시**: ${new Date().toLocaleString('ko-KR')}
+- **Triage 분류**: ${requestType}
+
+---
+## 1. 프로젝트 비전 및 목표
+${prdSummary}
+
+## 2. 타깃 페르소나 및 사용자 시나리오 (User Stories)
+- **주 사용자**: 웹 브라우저를 통해 서비스를 이용하고 상호작용하는 사용자
+- **핵심 시나리오**:
+  1. 사용자는 직관적인 웹 인터페이스를 통해 주요 기능에 접근한다.
+  2. 시스템은 즉각적인 피드백과 명확한 상태 변화를 시각적으로 전달한다.
+
+## 3. 핵심 기능 요구사항 (Functional Requirements)
+1. **사용자 요청 반영**: "${userPrompt}"
+2. **반응형 2D 캔버스 / UI 컴포넌트 렌더링**
+3. **상태 관리 및 데이터 영속성**
+
+## 4. 완료 판정 기준 (Acceptance Criteria)
+${acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+
+---
+*본 기획서는 윤기획(Planner Agent)에 의해 작성되어 프로젝트 폴더(\`projects/${projectId}/docs/PRD.md\`)에 영구 보관됩니다.*
+`;
+    await realAgentTools.write_file({
+      filename: 'docs/PRD.md',
+      projectId,
+      content: prdDoc
+    });
+
     eventBroker.agentMove(plannerAgent.id, MEETING_SEATS[1], 'walk');
     addDialogue({
       agentId: plannerAgent.id,
       agentName: plannerAgent.name,
       role: plannerAgent.role,
-      message: `📋 [Planner Agent — PRD / User Stories / Criteria 작성 완료]\n• PRD 명세: ${prdSummary}`,
+      message: `📋 [Planner Agent — PRD / User Stories 작성 완료]\n• 프로젝트: [${projectName}]\n• PRD 명세: ${prdSummary}\n• 산출물 문서: \`projects/${projectId}/docs/PRD.md\``,
       type: 'proposal'
     });
-    eventBroker.agentCompleted(plannerAgent.id, 'PRD / User Stories 작성 완료');
+    eventBroker.agentCompleted(plannerAgent.id, 'PRD / User Stories 작성 완료 (docs/PRD.md 보관)');
     await sleep(600);
 
     // Security Agent [Gate 1: Threat Modeling]
@@ -995,11 +1125,31 @@ async function runPmRouterTriageAndWbs({
       await sleep(500);
     }
 
+    // Security Audit 보고서 초기 저장
+    const auditDocInit = `# 🛡️ 보안 감사 및 위협 모델링 보고서 (Security Audit)
+
+- **프로젝트**: ${projectName} (\`${projectId}\`)
+- **보안 책임자**: 정보안 (Security Agent)
+- **최초 검토일**: ${new Date().toLocaleString('ko-KR')}
+
+---
+## Gate 1: 위협 모델링 (Threat Modeling)
+- **판정**: ${gate1Passed ? '✅ PASS' : '❌ REJECT'}
+- **심사 의견**: ${gate1Feedback}
+- **주입된 보안 지침 (Security Directives Injected)**:
+  ${securityDirectives}
+`;
+    await realAgentTools.write_file({
+      filename: 'docs/SECURITY_AUDIT.md',
+      projectId,
+      content: auditDocInit
+    });
+
     addDialogue({
       agentId: securityAgent.id,
       agentName: securityAgent.name,
       role: securityAgent.role,
-      message: `🛡️ [Gate 1: Threat Modeling 통과 ➔ Security Directives Injected]\n• 심사 의견: ${gate1Feedback}\n• 주입된 보안 지침: ${securityDirectives}`,
+      message: `🛡️ [Gate 1: Threat Modeling 통과 ➔ Security Directives Injected]\n• 심사 의견: ${gate1Feedback}\n• 주입된 보안 지침: ${securityDirectives}\n• 산출물 문서: \`projects/${projectId}/docs/SECURITY_AUDIT.md\``,
       type: 'discussion'
     });
     eventBroker.agentCompleted(securityAgent.id, 'Gate 1 통과 및 Security Directives 주입 완료');
@@ -1007,6 +1157,8 @@ async function runPmRouterTriageAndWbs({
   }
 
   return {
+    projectId,
+    projectName,
     targetFilename: resolvedTarget,
     requestType,
     dagBranches,
@@ -1023,7 +1175,7 @@ async function runPmRouterTriageAndWbs({
  *   - [Flaws Detected] ➔ (BE/FE Remediation Loop)
  *   - [Pass] + (Staging Prep) ➔ [Staging Build / Deploy]
  */
-async function executeSecurityGate2SAST({ securityAgent, infraAgent, targetFilename }) {
+async function executeSecurityGate2SAST({ securityAgent, infraAgent, targetFilename, sharedContracts }) {
   ensureAgentSpawned(securityAgent);
   eventBroker.agentMove(securityAgent.id, { deskIndex: securityAgent.deskIndex }, 'walk');
   eventBroker.updateWorkflowStatus({
@@ -1050,6 +1202,22 @@ async function executeSecurityGate2SAST({ securityAgent, infraAgent, targetFilen
   }
 
   const gatePassed = securityIssues.length === 0;
+
+  // 프로젝트 문서(docs/SECURITY_AUDIT.md)에 Gate 2 결과 기록
+  if (sharedContracts?.projectId) {
+    try {
+      const projId = sharedContracts.projectId;
+      const existing = await realAgentTools.read_file({ filename: 'docs/SECURITY_AUDIT.md', projectId: projId });
+      let auditContent = existing?.content || `# 🛡️ 보안 감사 보고서: ${sharedContracts.projectName || projId}\n\n`;
+      auditContent += `\n## Gate 2: SAST / SCA 정적 코드 분석
+- **검토 일시**: ${new Date().toLocaleString('ko-KR')}
+- **판정**: ${gatePassed ? '✅ PASS' : '❌ FLAW DETECTED'}
+- **검출된 취약점/결함**: ${securityIssues.length === 0 ? '0건 (안전)' : securityIssues.join(' / ')}
+- **분석 파일**: \`${targetFilename}\`
+`;
+      await realAgentTools.write_file({ filename: 'docs/SECURITY_AUDIT.md', projectId: projId, content: auditContent });
+    } catch (e) {}
+  }
 
   eventBroker.agentMove(securityAgent.id, MEETING_SEATS[6], 'walk');
   await sleep(500);
@@ -1101,7 +1269,7 @@ async function executeSecurityGate2SAST({ securityAgent, infraAgent, targetFilen
  *   - 통과 시 [Security Sign-off] 발행 ➔ PM Agent (Production Release)
  *   - 실패 시 PM Agent (Full Loop-back on Fail)
  */
-async function executeSecurityGate4DAST({ securityAgent, targetFilename }) {
+async function executeSecurityGate4DAST({ securityAgent, targetFilename, sharedContracts }) {
   ensureAgentSpawned(securityAgent);
   eventBroker.agentMove(securityAgent.id, { deskIndex: securityAgent.deskIndex }, 'walk');
   eventBroker.updateWorkflowStatus({
@@ -1128,6 +1296,21 @@ async function executeSecurityGate4DAST({ securityAgent, targetFilename }) {
     message: signOffMsg,
     type: 'proposal'
   });
+
+  // 프로젝트 문서(docs/SECURITY_AUDIT.md)에 Gate 4 최종 서명 기록
+  if (sharedContracts?.projectId) {
+    try {
+      const projId = sharedContracts.projectId;
+      const existing = await realAgentTools.read_file({ filename: 'docs/SECURITY_AUDIT.md', projectId: projId });
+      let auditContent = existing?.content || `# 🛡️ 보안 감사 보고서: ${sharedContracts.projectName || projId}\n\n`;
+      auditContent += `\n## Gate 4: DAST 동적 모의침투 및 Security Sign-off
+- **심사 일시**: ${new Date().toLocaleString('ko-KR')}
+- **최종 판정**: ✅ SECURITY SIGN-OFF ISSUED (프로덕션 배포 승인)
+- **런타임 보안 상태**: ${signOffMsg}
+`;
+      await realAgentTools.write_file({ filename: 'docs/SECURITY_AUDIT.md', projectId: projId, content: auditContent });
+    } catch (e) {}
+  }
 
   eventBroker.agentCompleted(securityAgent.id, 'Gate 4 통과 (Security Sign-off 완료!)');
   await sleep(500);
@@ -1295,6 +1478,37 @@ ${fileObj.content}
       type: tcPassed ? 'discussion' : 'issue'
     });
 
+    // 프로젝트 문서(docs/QA_REPORT.md) 저장
+    if (sharedContracts?.projectId) {
+      try {
+        const projId = sharedContracts.projectId;
+        const qaDoc = `# 🧪 QA 품질 검증 및 E2E 테스트 성적서 (QA Report)
+
+- **프로젝트**: ${sharedContracts.projectName || projId} (\`${projId}\`)
+- **품질 관리자**: ${agent.name} (${agent.role})
+- **검증 일시**: ${new Date().toLocaleString('ko-KR')}
+
+---
+## 1. 테스트 결과 요약
+- **최종 판정**: ${tcPassed ? '✅ PASS' : '❌ FAIL'}
+- **자동 정적/런타임 검사**: ${inspectData.valid ? '정상 (무결점)' : `결함 ${inspectData.issues.length}건`}
+- **코드 크기**: ${inspectData.metrics?.bytes || 0} bytes (${inspectData.metrics?.lines || 0} lines)
+
+## 2. 세부 테스트 케이스 (TC) 매트릭스
+${testCases.map((tc) => `- [${tcPassed ? 'x' : ' '}] **${tc}**: ${tcPassed ? '통과' : '미달'}`).join('\n')}
+
+## 3. QA 종합 의견
+${reportToLead}
+${foundIssues ? `\n> [!WARNING] 검출 결함:\n> ${foundIssues}` : ''}
+`;
+        await realAgentTools.write_file({
+          filename: 'docs/QA_REPORT.md',
+          projectId: projId,
+          content: qaDoc
+        });
+      } catch (e) {}
+    }
+
     eventBroker.agentCompleted(agent.id, tcPassed ? 'Gate 3 (QA E2E) Pass!' : `Gate 3 Fail (Defect Route -> ${failedDomain})`);
     await sleep(500);
 
@@ -1436,10 +1650,48 @@ ${
   }
 
   if (updatedCode) {
-    await realAgentTools.write_file({ filename: resolvedFile, content: updatedCode });
+    if (sharedContracts?.projectId) {
+      await realAgentTools.write_file({
+        filename: 'index.html',
+        projectId: sharedContracts.projectId,
+        content: updatedCode
+      });
+    } else {
+      await realAgentTools.write_file({ filename: resolvedFile, content: updatedCode });
+    }
   }
 
-  if (isDBA) sharedContracts.dbSchemaDDL = sharedSpec || reportToLead;
+  if (isDBA) {
+    sharedContracts.dbSchemaDDL = sharedSpec || reportToLead;
+    if (sharedContracts?.projectId) {
+      try {
+        let schemaData = {
+          projectId: sharedContracts.projectId,
+          projectName: sharedContracts.projectName,
+          updatedAt: new Date().toISOString(),
+          ddlSummary: sharedSpec || reportToLead,
+          entities: [
+            {
+              table: 'core_data',
+              description: '프로젝트 핵심 비즈니스 엔티티 테이블',
+              spec: sharedSpec || reportToLead
+            }
+          ]
+        };
+        const jsonMatch = (sharedSpec || '').match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            schemaData = JSON.parse(jsonMatch[0]);
+          } catch (e) {}
+        }
+        await realAgentTools.write_file({
+          filename: 'data/schema_ddl.json',
+          projectId: sharedContracts.projectId,
+          content: JSON.stringify(schemaData, null, 2)
+        });
+      } catch (e) {}
+    }
+  }
   if (isBE) sharedContracts.beOpenApiSpec = sharedSpec || reportToLead;
   if (isFE) sharedContracts.feUiSpec = sharedSpec || reportToLead;
 

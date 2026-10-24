@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>주모! 한 잔 더! - 한국의 술 100선 크래프팅 도감</title>
+  <style>
+    :root {
+      --primary: #3182f6;
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #f59e0b;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow-x: hidden;
+    }
+    /* 모바일 웹뷰 컨테이너 */
+    #app-container {
+      width: 100%;
+      max-width: 440px;
+      height: 100vh;
+      max-height: 880px;
+      background: #111827;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      border: 1px solid var(--border);
+    }
+    @media (min-width: 480px) {
+      #app-container {
+        height: 90vh;
+        border-radius: 24px;
+      }
+    }
+    /* 헤더 */
+    header {
+      padding: 16px 20px;
+      background: #1f2937;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+      flex-shrink: 0;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand h1 {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #f1f5f9;
+      letter-spacing: -0.5px;
+    }
+    .progress-pill {
+      font-size: 0.75rem;
+      background: rgba(49, 130, 246, 0.2);
+      color: #93c5fd;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-weight: 800;
+      border: 1px solid rgba(49, 130, 246, 0.5);
+      flex-shrink: 0;
+    }
+
+    /* 탭 메뉴 */
+    .tab-bar {
+      display: flex;
+      background: #0f172a;
+      border-bottom: 3px solid #3b82f6;
+      flex-shrink: 0;
+      width: 100%;
+      z-index: 15;
+    }
+    .tab-btn {
+      flex: 1;
+      min-height: 52px;
+      padding: 12px 10px;
+      text-align: center;
+      font-size: 1rem;
+      font-weight: 800;
+      color: #e2e8f0;
+      background: #1e293b;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      white-space: nowrap;
+      letter-spacing: -0.3px;
+    }
+    .tab-btn:hover {
+      background: #273549;
+    }
+    .tab-btn.active {
+      color: #ffffff;
+      background: #2563eb;
+      font-weight: 900;
+      box-shadow: inset 0 -3px 0 #93c5fd;
+    }
+
+    /* 본문 화면 */
+    .view {
+      flex: 1;
+      overflow-y: auto;
+      display: none;
+      flex-direction: column;
+    }
+    .view.active {
+      display: flex;
+    }
+
+    /* 양조장 (크래프팅) 화면 */
+    .pot-section {
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: radial-gradient(circle at center, #1f2937 0%, #111827 100%);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .cauldron {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: #1e293b;
+      border: 4px dashed #475569;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 12px;
+      position: relative;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .cauldron.has-items {
+      border-color: var(--primary);
+      box-shadow: 0 0 25px rgba(49, 130, 246, 0.4);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.03); }
+    }
+    .pot-slots {
+      display: flex;
+      gap: 6px;
+    }
+    .slot-icon {
+      font-size: 1.8rem;
+    }
+    .selected-chips {
+      display: flex;
+      gap: 6px;
+      min-height: 32px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .chip {
+      background: #334155;
+      padding: 4px 10px;
+      border-radius: 14px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      animation: pop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    @keyframes pop {
+      0% { transform: scale(0.5); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .chip button {
+      background: none;
+      border: none;
+      color: #cbd5e1;
+      cursor: pointer;
+      font-weight: 900;
+      font-size: 0.95rem;
+      line-height: 1;
+    }
+    .mix-btn {
+      width: 100%;
+      max-width: 290px;
+      padding: 13px;
+      background: var(--primary);
+      color: white;
+      font-weight: 800;
+      font-size: 1rem;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(49, 130, 246, 0.4);
+      transition: all 0.2s;
+    }
+    .mix-btn:disabled {
+      background: #374151;
+      color: #94a3b8;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+    .mix-btn:active:not(:disabled) {
+      transform: scale(0.97);
+    }
+
+    /* 재료 인벤토리 */
+    .inventory-section {
+      flex: 1;
+      padding: 14px 16px;
+      overflow-y: auto;
+    }
+    .section-title {
+      font-size: 0.88rem;
+      font-weight: 800;
+      color: #cbd5e1;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .ingredients-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .ing-card {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ing-card:active {
+      transform: scale(0.92);
+      border-color: var(--primary);
+    }
+    .ing-card.selected {
+      background: rgba(49, 130, 246, 0.2);
+      border-color: #60a5fa;
+      box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+    }
+    .ing-emoji {
+      font-size: 1.6rem;
+    }
+    .ing-name {
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      text-align: center;
+      word-break: keep-all;
+    }
+
+    /* 도감 화면 및 필터 */
+    .filter-scroll {
+      display: flex;
+      gap: 6px;
+      padding: 10px 12px;
+      background: #111827;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow-x: auto;
+      white-space: nowrap;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .filter-scroll::-webkit-scrollbar {
+      display: none;
+    }
+    .filter-btn {
+      padding: 7px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 800;
+      background: #1e293b;
+      color: #f1f5f9;
+      border: 1px solid #475569;
+      white-space: nowrap;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.2;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .filter-btn.active {
+      background: #3b82f6;
+      color: #ffffff;
+      border-color: #93c5fd;
+      box-shadow: 0 2px 10px rgba(59, 130, 246, 0.45);
+    }
+    .sool-grid {
+      padding: 14px 16px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      flex: 1;
+      overflow-y: auto;
+    }
+    .sool-card {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      position: relative;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .sool-card.locked {
+      opacity: 0.45;
+      filter: grayscale(1);
+    }
+    .sool-emoji {
+      font-size: 2.2rem;
+    }
+    .sool-name {
+      font-size: 0.85rem;
+      font-weight: 800;
+      color: #f8fafc;
+      text-align: center;
+    }
+    .sool-tag {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 3px 6px;
+      border-radius: 6px;
+      background: #334155;
+      color: #93c5fd;
+    }
+
+    /* 결과 팝업 모달 */
+    .modal-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(5px);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+      z-index: 50;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+    .result-card {
+      background: #1e293b;
+      border: 2px solid var(--primary);
+      border-radius: 20px;
+      padding: 22px;
+      width: 100%;
+      max-width: 320px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      animation: modalPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    @keyframes modalPop {
+      0% { transform: scale(0.7); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .result-emoji {
+      font-size: 3.8rem;
+      margin: 4px 0;
+    }
+    .result-title {
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: #f8fafc;
+    }
+    .result-desc {
+      font-size: 0.82rem;
+      color: #cbd5e1;
+      line-height: 1.45;
+    }
+    .result-recipe {
+      font-size: 0.75rem;
+      background: #0f172a;
+      padding: 6px 12px;
+      border-radius: 8px;
+      color: #38bdf8;
+      border: 1px solid #334155;
+      font-weight: 700;
+    }
+    .close-btn {
+      width: 100%;
+      padding: 12px;
+      background: var(--primary);
+      color: white;
+      font-weight: 800;
+      font-size: 0.98rem;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="app-container">
+  <!-- 상단바 -->
+  <header>
+    <div class="brand">
+      <span style="font-size: 1.5rem;">🍶</span>
+      <div>
+        <h1>주모! 한 잔 더!</h1>
+        <div style="font-size: 0.7rem; color: #94a3b8; font-weight: 600;">한국의 술 100선 크래프팅</div>
+      </div>
+    </div>
+    <div class="progress-pill">
+      해금 도감: <span id="unlocked-count">1</span> / 100
+    </div>
+  </header>
+
+  <!-- 메인 탭 네비게이션 -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('brew')">⚗️ 주조실 (합성)</button>
+    <button class="tab-btn" onclick="switchTab('collection')">📜 주막 도감 (100선)</button>
+  </nav>
+
+  <!-- 화면 1: 주조실 (Crafting) -->
+  <div id="view-brew" class="view active">
+    <div class="pot-section">
+      <div id="cauldron" class="cauldron">
+        <div id="pot-slots" class="pot-slots">
+          <span style="font-size: 2.2rem; opacity: 0.4;">🍶</span>
+        </div>
+      </div>
+      <div id="selected-chips" class="selected-chips">
+        <span style="font-size: 0.8rem; color: #94a3b8; line-height: 32px; font-weight: 600;">하단에서 재료를 2~3개 선택하세요</span>
+      </div>
+      <button id="mix-btn" class="mix-btn" disabled onclick="craftSool()">술 빚기 (조합 실행)</button>
+    </div>
+
+    <div class="inventory-section">
+      <div class="section-title">
+        <span>선택 가능한 천연 재료 (24종)</span>
+        <button onclick="clearSelection()" style="background: none; border: none; color: #60a5fa; font-size: 0.8rem; font-weight: 700; cursor: pointer;">선택 비우기</button>
+      </div>
+      <div id="ingredients-grid" class="ingredients-grid">
+        <!-- JS 렌더링 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 화면 2: 도감 (Collection) -->
+  <div id="view-collection" class="view">
+    <div class="filter-scroll">
+      <button class="filter-btn active" onclick="filterCategory('전체')">전체보기 (100)</button>
+      <button class="filter-btn" onclick="filterCategory('폭탄주')">💥 폭탄주/이색</button>
+      <button class="filter-btn" onclick="filterCategory('국민주')">🍺 국민 데일리</button>
+      <button class="filter-btn" onclick="filterCategory('전통명주')">🏺 전통명주/약주</button>
+      <button class="filter-btn" onclick="filterCategory('증류주')">🥃 K-프리미엄 증류</button>
+      <button class="filter-btn" onclick="filterCategory('탁주/약주')">🥛 탁주/막걸리</button>
+      <button class="filter-btn" onclick="filterCategory('과실주')">🍇 지역특산 과실주</button>
+    </div>
+    <div id="sool-grid" class="sool-grid">
+      <!-- JS 렌더링 -->
+    </div>
+  </div>
+
+  <!-- 결과 팝업 모달 -->
+  <div id="modal" class="modal-overlay">
+    <div class="result-card">
+      <div id="res-tag" class="sool-tag">폭탄주/이색믹스</div>
+      <div id="res-emoji" class="result-emoji">🍺</div>
+      <div id="res-title" class="result-title">소맥</div>
+      <div id="res-desc" class="result-desc">설명</div>
+      <div id="res-recipe" class="result-recipe">조합법</div>
+      <button class="close-btn" onclick="closeModal()">도감에 저장하기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// 1. 재료 DB (24종 완비: 기본 주류 3종, 곡물/누룩 4종, 음료/믹서 5종, 천연 특산 부재료 12종)
+const INGREDIENTS = [
+  { id: 'soju', name: '소주', emoji: '🍶', cat: 'base' },
+  { id: 'beer', name: '라거 맥주', emoji: '🍺', cat: 'base' },
+  { id: 'makgeolli', name: '생막걸리', emoji: '🥛', cat: 'base' },
+  { id: 'rice', name: '쌀', emoji: '🌾', cat: 'raw' },
+  { id: 'barley', name: '보리', emoji: '🌾', cat: 'raw' },
+  { id: 'yeast', name: '누룩', emoji: '🍞', cat: 'raw' },
+  { id: 'cider', name: '사이다', emoji: '🥤', cat: 'mixer' },
+  { id: 'cola', name: '콜라', emoji: '🥤', cat: 'mixer' },
+  { id: 'tonic', name: '토닉워터', emoji: '🫧', cat: 'mixer' },
+  { id: 'energy', name: '에너지드링크', emoji: '⚡', cat: 'mixer' },
+  { id: 'bokbunja', name: '복분자', emoji: '🫐', cat: 'special' },
+  { id: 'honey', name: '꿀', emoji: '🍯', cat: 'special' },
+  { id: 'ginseng', name: '인삼', emoji: '🪴', cat: 'special' },
+  { id: 'pear', name: '배', emoji: '🍐', cat: 'special' },
+  { id: 'ginger', name: '생강', emoji: '🫚', cat: 'special' },
+  { id: 'icecream', name: '메로나', emoji: '🍈', cat: 'special' },
+  { id: 'coffee', name: '캔커피', emoji: '☕', cat: 'mixer' },
+  { id: 'water', name: '청정 암반수', emoji: '💧', cat: 'raw' },
+  { id: 'yuzu', name: '고흥 유자', emoji: '🍋', cat: 'special' },
+  { id: 'plum', name: '광양 매실', emoji: '🟢', cat: 'special' },
+  { id: 'chrysanthemum', name: '감국 국화', emoji: '🌼', cat: 'special' },
+  { id: 'omija', name: '문경 오미자', emoji: '🍒', cat: 'special' },
+  { id: 'pine', name: '강원 솔잎', emoji: '🌲', cat: 'special' },
+  { id: 'chestnut', name: '공주 알밤', emoji: '🌰', cat: 'special' }
+];
+
+// 2. 한국의 술 100선 크래프팅 레시피 DB (전통 주조학적 고증 반영 및 100종 전수 고유 조합 검증 완료)
+const RECIPES = [
+  // --- [1] 폭탄주 및 이색 믹스 (20종) ---
+  {
+    id: 'somaek',
+    name: '황금비율 소맥',
+    category: '폭탄주',
+    emoji: '🍺',
+    items: ['beer', 'soju'],
+    desc: '소주 3에 맥주 7! 숟가락으로 탁 쳐서 거품을 일으킨 대한민국의 영원한 회식 소울 드링크.'
+  },
+  {
+    id: 'mak-cider',
+    name: '막사 (막걸리+사이다)',
+    category: '폭탄주',
+    emoji: '🍶',
+    items: ['cider', 'makgeolli'],
+    desc: '달콤톡톡! 비 오는 날 파전과 함께 꿀떡꿀떡 넘어가는 전설의 주막 칵테일.'
+  },
+  {
+    id: 'gojingamrae',
+    name: '고진감래주',
+    category: '폭탄주',
+    emoji: '🥂',
+    items: ['beer', 'cola', 'soju'],
+    desc: '처음엔 쓰고 쌉싸름하지만 마지막에 달콤한 콜라가 감도는 인생의 축소판 폭탄주!'
+  },
+  {
+    id: 'melona-ju',
+    name: '메로나주',
+    category: '폭탄주',
+    emoji: '🍈',
+    items: ['cider', 'icecream', 'soju'],
+    desc: '올 때 메로나! 소주에 사이다와 메로나를 녹여 부드러운 멜론 크림 칵테일 탄생.'
+  },
+  {
+    id: 'energy-bomb',
+    name: '에너지 소주밤',
+    category: '폭탄주',
+    emoji: '⚡',
+    items: ['energy', 'soju'],
+    desc: '밤새 달릴 준비 완료! 소주에 고카페인 에너지 드링크를 섞어 각성도를 극대화한 밤.'
+  },
+  {
+    id: 'soju-tonic',
+    name: '쏘토닉 (하이볼 스타일)',
+    category: '폭탄주',
+    emoji: '🫧',
+    items: ['soju', 'tonic'],
+    desc: '레몬 슬라이스와 얼음 가득! 젊은 세대가 가장 즐겨 마시는 산뜻한 소주 하이볼.'
+  },
+  {
+    id: 'coffee-soju',
+    name: '더위사냥 커피소주',
+    category: '폭탄주',
+    emoji: '☕',
+    items: ['coffee', 'soju'],
+    desc: '달콤쌉싸름한 캔커피와 소주의 만남! 은은한 카페인과 알코올의 절묘한 밸런스.'
+  },
+  {
+    id: 'so-cola',
+    name: '소콜 (소주+콜라)',
+    category: '폭탄주',
+    emoji: '🥤',
+    items: ['cola', 'soju'],
+    desc: '달콤한 콜라향 뒤에 숨겨진 묵직한 취기! 가성비 최고로 즐기는 대중적 혼합주.'
+  },
+  {
+    id: 'honey-soju',
+    name: '꿀소주',
+    category: '폭탄주',
+    emoji: '🍯',
+    items: ['honey', 'soju'],
+    desc: '달콤함 끝판왕! 소주의 알코올 향을 꿀의 진한 풍미로 부드럽게 감싼 한 잔.'
+  },
+  {
+    id: 'red-eye-kr',
+    name: '복맥 (복분자+맥주)',
+    category: '폭탄주',
+    emoji: '🍷',
+    items: ['beer', 'bokbunja'],
+    desc: '맥주의 탄산과 복분자의 진한 과즙이 만나 매혹적인 붉은빛 버블 칵테일을 완성.'
+  },
+  {
+    id: 'energy-beer',
+    name: '에너지 비어 폭탄',
+    category: '폭탄주',
+    emoji: '⚡',
+    items: ['beer', 'energy'],
+    desc: '톡 쏘는 청량 맥주에 타우린 에너지를 더해 락 페스티벌 감성을 불태우는 폭탄주.'
+  },
+  {
+    id: 'honey-beer',
+    name: '달콤 꿀맥주',
+    category: '폭탄주',
+    emoji: '🍻',
+    items: ['beer', 'honey'],
+    desc: '스몰비어 주점의 인기 시그니처 메뉴! 달콤한 벌꿀 향이 부드러운 맥주 거품과 조화.'
+  },
+  {
+    id: 'icecream-beer',
+    name: '메로나 맥주 플로트',
+    category: '폭탄주',
+    emoji: '🍦',
+    items: ['beer', 'icecream'],
+    desc: '맥주 거품 위에 크리미한 아이스크림이 사르르 녹아내리는 이색 디저트 맥주.'
+  },
+  {
+    id: 'mak-honey',
+    name: '주막 꿀막걸리',
+    category: '폭탄주',
+    emoji: '🍯',
+    items: ['honey', 'makgeolli'],
+    desc: '항아리 막걸리에 토종 벌꿀을 듬뿍 넣어 한 사발 들이켜면 피로가 사르르 녹는 맛.'
+  },
+  {
+    id: 'mak-cola',
+    name: '막콜 (막걸리+콜라)',
+    category: '폭탄주',
+    emoji: '🥤',
+    items: ['cola', 'makgeolli'],
+    desc: '부드러운 유산균 산미와 톡 쏘는 캐러멜 탄산의 이색 조화! MZ세대의 숨은 꿀조합.'
+  },
+  {
+    id: 'mak-tonic',
+    name: '막토닉 스파클링',
+    category: '폭탄주',
+    emoji: '🫧',
+    items: ['makgeolli', 'tonic'],
+    desc: '진한 탁주를 토닉워터로 가볍게 풀어내 샴페인처럼 청량하게 즐기는 주막 칵테일.'
+  },
+  {
+    id: 'so-cider',
+    name: '소사 (소주+사이다)',
+    category: '폭탄주',
+    emoji: '🥤',
+    items: ['cider', 'soju'],
+    desc: '투명하고 청량한 탄산주! 소주의 쓴맛을 시원한 사이다가 깨끗이 씻어줍니다.'
+  },
+  {
+    id: 'beer-cider',
+    name: '파나셰 K-맥사',
+    category: '폭탄주',
+    emoji: '🍺',
+    items: ['beer', 'cider'],
+    desc: '유럽의 샨디처럼 가볍고 상쾌하게! 맥주와 사이다의 청량감 넘치는 조합.'
+  },
+  {
+    id: 'beer-cola',
+    name: '디젤 K-맥콜라',
+    category: '폭탄주',
+    emoji: '🍺',
+    items: ['beer', 'cola'],
+    desc: '독일식 콜라 맥주를 한국식으로! 깊고 달콤한 흑맥주 느낌을 내는 혼합 음료.'
+  },
+  {
+    id: 'sam-soju-bomb',
+    name: '삼총사 폭탄주',
+    category: '폭탄주',
+    emoji: '💣',
+    items: ['beer', 'cider', 'soju'],
+    desc: '소주, 맥주, 사이다가 어우러져 만들어내는 완벽한 회식자리 원샷 릴레이 폭탄주.'
+  },
+
+  // --- [2] 국민 데일리 주류 (15종) ---
+  {
+    id: 'chamisul',
+    name: '국민 참이슬 소주',
+    category: '국민주',
+    emoji: '🍶',
+    items: ['soju', 'water'],
+    desc: '대나무 숯으로 4번 걸러 깨끗함의 대명사가 된 대한민국의 초록색 병 소주.'
+  },
+  {
+    id: 'cass',
+    name: '시원한 카스 프레시',
+    category: '국민주',
+    emoji: '🍺',
+    items: ['beer', 'water'],
+    desc: '콜드 브루 공법으로 톡 쏘는 짜릿함과 청량감을 자랑하는 대한민국 대표 라거 맥주.'
+  },
+  {
+    id: 'seoul-makgeolli',
+    name: '서울 장수 생막걸리',
+    category: '국민주',
+    emoji: '🥛',
+    items: ['makgeolli', 'water'],
+    desc: '살아있는 효모와 천연 탄산! 퇴근길 삼총사가 사랑하는 부동의 국민 막걸리.'
+  },
+  {
+    id: 'jinro-is-back',
+    name: '진로 이즈 백',
+    category: '국민주',
+    emoji: '🐸',
+    items: ['soju', 'tonic', 'water'],
+    desc: '스카이블루 병의 초깔끔한 맛! 토닉워터와 환상의 조화를 이루며 뉴트로 열풍을 일으킨 두꺼비의 귀환.'
+  },
+  {
+    id: 'chumchurum',
+    name: '처음처럼 부드러운 소주',
+    category: '국민주',
+    emoji: '💧',
+    items: ['barley', 'soju', 'water'],
+    desc: '대관령 기슭 암반수로 빚어 부드럽게 흔들어 마시는 회식자리 단골 소주.'
+  },
+  {
+    id: 'terra',
+    name: '청정라거 테라',
+    category: '국민주',
+    emoji: '🍺',
+    items: ['barley', 'beer'],
+    desc: '호주 청정 맥아 100%와 리얼 탄산의 극치! 회식 자리를 지배하는 초록 맥주.'
+  },
+  {
+    id: 'kloud',
+    name: '클라우드 오리지널',
+    category: '국민주',
+    emoji: '🍺',
+    items: ['beer', 'water', 'yeast'],
+    desc: '물을 타지 않는 오리지널 그래비티 공법으로 풍부한 거품과 깊은 맛을 낸 맥주.'
+  },
+  {
+    id: 'cheongha',
+    name: '깔끔한 청하',
+    category: '국민주',
+    emoji: '🍶',
+    items: ['cider', 'rice', 'yeast'],
+    desc: '3번 깎아낸 쌀로 빚어 냉각 여과한 깔끔함! 횟집에서 빠질 수 없는 맑은 청주.'
+  },
+  {
+    id: 'hite-extra',
+    name: '하이트 엑스트라 콜드',
+    category: '국민주',
+    emoji: '🍺',
+    items: ['beer', 'rice'],
+    desc: '빙점 영역에서 여과하여 잡미를 없애고 극강의 차가운 목넘김을 선사하는 라거.'
+  },
+  {
+    id: 'goodday',
+    name: '좋은데이 순한소주',
+    category: '국민주',
+    emoji: '🍶',
+    items: ['pear', 'soju'],
+    desc: '지리산 산청 암반수와 배 농축액의 조화로 목넘김이 극도로 부드러운 남부의 명물 소주.'
+  },
+  {
+    id: 'daesun',
+    name: '부산 대선 소주',
+    category: '국민주',
+    emoji: '🌊',
+    items: ['honey', 'soju', 'water'],
+    desc: '원적외선 숙성공법에 벌꿀을 첨가해 숙취를 줄이고 깔끔한 단맛을 살린 부산 대표 소주.'
+  },
+  {
+    id: 'cham-soju',
+    name: '대구 경북 맛있는 참',
+    category: '국민주',
+    emoji: '🍶',
+    items: ['barley', 'soju'],
+    desc: '첨단 고순도 정제 공법을 적용해 뒤끝이 깔끔하고 부드러운 영남의 소울 소주.'
+  },
+  {
+    id: 'ipsaeju',
+    name: '보해 잎새주',
+    category: '국민주',
+    emoji: '🍃',
+    items: ['ginger', 'soju', 'water'],
+    desc: '노령산맥 청정 지하수에 단풍나무 수액과 알싸한 생강 기운을 담아낸 호남의 대표 소주.'
+  },
+  {
+    id: 'hallasan',
+    name: '제주 한라산 21',
+    category: '국민주',
+    emoji: '🏔️',
+    items: ['rice', 'soju'],
+    desc: '화산암반수로 빚어낸 21도의 묵직한 카리스마! 제주 흑돼지와 찰떡궁합을 이루는 소주.'
+  },
+  {
+    id: 'kelly-beer',
+    name: '더블 컬렉션 켈리',
+    category: '국민주',
+    emoji: '🍺',
+    items: ['barley', 'beer', 'water'],
+    desc: '덴마크 프리미엄 맥아를 더블 숙성하여 부드러움과 강렬한 탄산감을 동시에 잡은 맥주.'
+  },
+
+  // --- [3] 조선 3대 명주 및 전통명주/약주 (20종) ---
+  {
+    id: 'gamhongno',
+    name: '감홍로 (조선 3대 명주)',
+    category: '전통명주',
+    emoji: '🏺',
+    items: ['ginger', 'honey', 'rice'],
+    desc: '별주부전에서 자라가 토끼를 유혹할 때 언급된 조선 최고의 붉고 달콤한 이슬 명주.'
+  },
+  {
+    id: 'leegangju',
+    name: '이강주 (조선 3대 명주)',
+    category: '전통명주',
+    emoji: '🍐',
+    items: ['ginger', 'honey', 'pear'],
+    desc: '전주 명물! 시원한 배와 알싸한 생강, 울금과 토종 벌꿀이 어우러진 조선 3대 명약주.'
+  },
+  {
+    id: 'jukryeokgo',
+    name: '죽력고 (조선 3대 명주)',
+    category: '전통명주',
+    emoji: '🎋',
+    items: ['ginger', 'pine', 'rice'],
+    desc: '대나무 기름인 죽력과 생강, 솔잎을 증류하여 빚은 녹두장군 전봉준의 기운찬 명주.'
+  },
+  {
+    id: 'hansan-sogokju',
+    name: '한산 소곡주 (앉은뱅이술)',
+    category: '전통명주',
+    emoji: '🏺',
+    items: ['chrysanthemum', 'rice', 'yeast'],
+    desc: '1500년 백제의 역사! 들국화와 찹쌀, 토종 누룩으로 빚어 일어설 줄 모른다는 전설의 명주.'
+  },
+  {
+    id: 'baekseju',
+    name: '국순당 백세주',
+    category: '전통명주',
+    emoji: '🏺',
+    items: ['ginseng', 'rice', 'yeast'],
+    desc: '인삼과 생약재를 생쌀발효법으로 빚어 좋은 술로 백세까지 건강을 기원하는 국민 약주.'
+  },
+  {
+    id: 'myeoncheon-dugyonju',
+    name: '면천 두견주',
+    category: '전통명주',
+    emoji: '🌸',
+    items: ['honey', 'omija', 'rice'],
+    desc: '국가무형문화재 제86호! 진달래꽃과 오미자, 찹쌀로 빚어 은은한 꽃향기와 감미가 일품인 명주.'
+  },
+  {
+    id: 'munbaeju-origin',
+    name: '문배주 약주원액',
+    category: '전통명주',
+    emoji: '🍐',
+    items: ['barley', 'pear', 'yeast'],
+    desc: '배를 넣지 않아도 문배나무 열매 향이 그윽하게 피어나는 평안도 전승의 국가무형문화재.'
+  },
+  {
+    id: 'gukhwaju',
+    name: '마산 감국 국화주',
+    category: '전통명주',
+    emoji: '🌼',
+    items: ['chrysanthemum', 'rice', 'water'],
+    desc: '가을 서리를 맞고 자란 노란 감국 꽃잎을 맑은 암반수와 쌀로 빚어 머리를 맑게 해주는 전통 풍류 약주.'
+  },
+  {
+    id: 'songjeolju',
+    name: '서울 송절주',
+    category: '전통명주',
+    emoji: '🌲',
+    items: ['pine', 'rice', 'yeast'],
+    desc: '소나무 마디의 송절과 당귀를 멥쌀, 누룩과 함께 발효시켜 선비의 기개를 담은 서울시 무형문화재.'
+  },
+  {
+    id: 'chuseongju',
+    name: '담양 추성주',
+    category: '전통명주',
+    emoji: '🏺',
+    items: ['barley', 'ginseng', 'rice'],
+    desc: '천년고찰의 비전! 멥쌀과 보리, 인삼 등 각종 한약재를 정성껏 달여 빚은 담양의 명주.'
+  },
+  {
+    id: 'cheonbiju',
+    name: '평택 천비향 약주',
+    category: '전통명주',
+    emoji: '🍶',
+    items: ['honey', 'rice', 'yeast'],
+    desc: '오양주 공법으로 멥쌀과 찹쌀, 토종 누룩과 벌꿀을 더해 백 일간 발효 숙성한 황금빛 약주.'
+  },
+  {
+    id: 'gyodong-beopju',
+    name: '경주 교동법주',
+    category: '전통명주',
+    emoji: '🏺',
+    items: ['rice', 'water', 'yeast'],
+    desc: '경주 최부자댁 300년 내림 가양주! 찹쌀과 토종 밀누룩, 맑은 암반수만을 사용하여 부드럽고 그윽한 전통 밀주.'
+  },
+  {
+    id: 'omijacheong-ju',
+    name: '문경 오미자 맑은청주',
+    category: '전통명주',
+    emoji: '🍒',
+    items: ['omija', 'rice', 'yeast'],
+    desc: '다섯 가지 오묘한 맛의 문경 오미자를 청주에 담아 투명한 선홍빛과 산뜻한 산미를 자랑.'
+  },
+  {
+    id: 'samhaeju',
+    name: '서울 삼해주',
+    category: '전통명주',
+    emoji: '🍶',
+    items: ['barley', 'rice', 'yeast'],
+    desc: '정월 첫 돼지날부터 세 번에 걸쳐 빚어 저온 숙성하는 조선 왕실의 기품 있는 명주.'
+  },
+  {
+    id: 'solgaju',
+    name: '함양 솔송주',
+    category: '전통명주',
+    emoji: '🌲',
+    items: ['honey', 'pine', 'rice'],
+    desc: '지리산 맑은 솔잎과 송순, 찹쌀로 빚어 은은한 솔향기가 입안 가득 맴도는 하동정씨 명주.'
+  },
+  {
+    id: 'gwasaju',
+    name: '전통 과하주',
+    category: '전통명주',
+    emoji: '🏺',
+    items: ['honey', 'makgeolli', 'soju'],
+    desc: '여름을 지나는 술! 발효 중인 발효주에 증류 소주를 섞어 상하지 않고 감칠맛을 보존한 선조의 지혜.'
+  },
+  {
+    id: 'ginseng-yakju',
+    name: '금산 인삼백약주',
+    category: '전통명주',
+    emoji: '🪴',
+    items: ['ginseng', 'honey', 'rice'],
+    desc: '금산 6년근 수삼을 쌀과 함께 장기 발효하여 진한 사포닌 향과 깊은 보양감을 주는 명품 약주.'
+  },
+  {
+    id: 'cheongmyeongju',
+    name: '충주 청명주',
+    category: '전통명주',
+    emoji: '🏺',
+    items: ['barley', 'rice', 'water'],
+    desc: '청명절에 마시는 맑고 깨끗한 술! 찹쌀과 보리 누룩으로 빚어 쌉싸름하면서도 입에 착 감기는 충북 무형문화재.'
+  },
+  {
+    id: 'yuzu-yakju',
+    name: '남해 유자향 약주',
+    category: '전통명주',
+    emoji: '🍋',
+    items: ['rice', 'yeast', 'yuzu'],
+    desc: '따스한 남해 해풍을 맞고 자란 노란 유자의 향긋함을 맑은 약주 속에 온전히 우려낸 술.'
+  },
+  {
+    id: 'baekhwaju',
+    name: '백화주 (백가지 꽃술)',
+    category: '전통명주',
+    emoji: '💐',
+    items: ['chrysanthemum', 'honey', 'yeast'],
+    desc: '온갖 꽃들의 진액과 벌꿀을 누룩과 함께 빚어 봄날 화원의 향기를 한 모금에 머금는 비전주.'
+  },
+
+  // --- [4] K-프리미엄 증류주 (15종) ---
+  {
+    id: 'won-soju',
+    name: 'K-프리미엄 원소주',
+    category: '증류주',
+    emoji: '🥃',
+    items: ['rice', 'soju', 'tonic'],
+    desc: '100% 국내산 쌀로 빚어 맑게 감압증류한 원액에 모던한 토닉 하이볼 감성을 담은 프리미엄 K-소주.'
+  },
+  {
+    id: 'andong-soju',
+    name: '명인 안동소주 45',
+    category: '증류주',
+    emoji: '🥃',
+    items: ['rice', 'soju', 'yeast'],
+    desc: '500년 전통의 상압증류 방식으로 빚어 은은한 곡향과 폭발적인 타격감을 선사하는 안동의 자존심.'
+  },
+  {
+    id: 'hwayo-41',
+    name: '광주요 화요 41',
+    category: '증류주',
+    emoji: '🥃',
+    items: ['ginger', 'rice', 'water'],
+    desc: '지하 150m 천연 암반수와 국산 쌀을 옹기에서 장기 숙성해 목넘김이 극도로 매끄러운 프리미엄 소주.'
+  },
+  {
+    id: 'moonbaesool-distill',
+    name: '문배술 40 증류원액',
+    category: '증류주',
+    emoji: '🍐',
+    items: ['barley', 'pear', 'water'],
+    desc: '찰수수와 조, 보리를 상압증류하여 야생 문배나무 배 향이 감도는 대한민국 대표 증류식 소주.'
+  },
+  {
+    id: 'mir-soju',
+    name: '용인 미르 40',
+    category: '증류주',
+    emoji: '🥃',
+    items: ['barley', 'rice', 'soju'],
+    desc: '용인 백옥쌀 100%와 누룩을 원료로 어떠한 인공 첨가물 없이 정통 상압증류 방식으로 내린 묵직한 쌀소주.'
+  },
+  {
+    id: 'gobaekju',
+    name: '진도 홍주 (지초 증류주)',
+    category: '증류주',
+    emoji: '🍷',
+    items: ['barley', 'honey', 'soju'],
+    desc: '고려시대부터 이어진 붉은 보석! 쌀과 보리로 증류한 소주가 지초를 통과하며 붉은 빛으로 승화.'
+  },
+  {
+    id: 'leegangju-distill',
+    name: '이강주 25 프리미엄 증류',
+    category: '증류주',
+    emoji: '🍐',
+    items: ['ginger', 'pear', 'soju'],
+    desc: '전통 이강주 원액을 감압증류하여 알싸한 배와 생강의 청량함을 현대식으로 재해석한 증류주.'
+  },
+  {
+    id: 'cheongbaek-soju',
+    name: '여주 청백 쌀증류주',
+    category: '증류주',
+    emoji: '🥃',
+    items: ['rice', 'tonic', 'water'],
+    desc: '비옥한 대왕님표 여주쌀을 맑은 물과 토닉 감성으로 정제해 내린 깔끔하고 청아한 데일리 증류원액.'
+  },
+  {
+    id: 'tosoju',
+    name: '한산 불소곡주 43',
+    category: '증류주',
+    emoji: '🔥',
+    items: ['chrysanthemum', 'rice', 'soju'],
+    desc: '앉은뱅이술 한산 소곡주(국화+찹쌀)를 소주고리에 올려 불처럼 내린 알코올 43도의 그윽하고 강렬한 전통 화주.'
+  },
+  {
+    id: 'songhwa-baekilju',
+    name: '송화백일주 증류명주',
+    category: '증류주',
+    emoji: '🌲',
+    items: ['honey', 'pine', 'water'],
+    desc: '수령 수백 년 소나무 송화가루와 솔잎을 백 일 동안 숙성시켜 증류한 전라북도 무형문화재 제1호.'
+  },
+  {
+    id: 'tokki-soju',
+    name: '토끼소주 블랙라벨',
+    category: '증류주',
+    emoji: '🐇',
+    items: ['rice', 'soju', 'water'],
+    desc: '뉴욕 브루클린에서 탄생해 한국으로 금의환향! 찹쌀 100%와 천연 암반수로 빚어낸 아메리칸 헤리티지 소주.'
+  },
+  {
+    id: 'dongjeong-distill',
+    name: '동정춘 증류이슬주',
+    category: '증류주',
+    emoji: '💧',
+    items: ['honey', 'rice', 'water'],
+    desc: '한 방울 한 방울 정성으로 받아낸 이슬! 진한 곡물 감미와 맑은 알코올의 극적인 하모니.'
+  },
+  {
+    id: 'barley-soju',
+    name: '군산 보리증류소주',
+    category: '증류주',
+    emoji: '🌾',
+    items: ['barley', 'water', 'yeast'],
+    desc: '국산 찰보리만을 단독 원료로 상압증류하여 위스키를 능가하는 구수한 보리빵 풍미의 증류주.'
+  },
+  {
+    id: 'samhae-soju',
+    name: '삼해소주 증류 45',
+    category: '증류주',
+    emoji: '🥃',
+    items: ['barley', 'soju', 'yeast'],
+    desc: '세 번 빚은 삼해주 덧술을 소주고리로 한 방울씩 상압증류하여 천년 서울의 고귀한 품격을 담아낸 45도 명주.'
+  },
+  {
+    id: 'oak-soju',
+    name: '오크숙성 K-소주',
+    category: '증류주',
+    emoji: '🪵',
+    items: ['barley', 'pine', 'soju'],
+    desc: '엄선된 국산 소주 원액을 참나무 오크통에서 장기 숙성하여 은은한 나무향과 깊은 바닐라 풍미를 머금은 걸작.'
+  },
+
+  // --- [5] 탁주 및 생막걸리 명품선 (15종) ---
+  {
+    id: 'boksoondoga',
+    name: '복순도가 손막걸리 (샴페인 막걸리)',
+    category: '탁주/약주',
+    emoji: '🍾',
+    items: ['makgeolli', 'water', 'yeast'],
+    desc: '천연 탄산의 폭발! 전통 누룩과 생막걸리 원주가 빚어내는 샴페인 같은 천연 버블 프리미엄 손막걸리.'
+  },
+  {
+    id: 'ihwaju',
+    name: '떠먹는 막걸리 이화주',
+    category: '탁주/약주',
+    emoji: '🥄',
+    items: ['rice', 'yeast'],
+    desc: '배꽃 필 무렵 빚는 고려 왕실 명주! 물 한 방울 없이 오직 쌀 경단과 누룩으로만 빚어 요거트처럼 떠먹는 귀한 탁주.'
+  },
+  {
+    id: 'haechang-12',
+    name: '해남 해창막걸리 12도',
+    category: '탁주/약주',
+    emoji: '🥛',
+    items: ['makgeolli', 'rice', 'yeast'],
+    desc: '인공 감미료 0%! 해남 간척지 찹쌀 고두밥을 3번 덧술한 삼양주 원액 그대로 걸쭉하고 진한 롤스로이스 막걸리.'
+  },
+  {
+    id: 'chestnut-mak',
+    name: '공주 알밤 막걸리',
+    category: '탁주/약주',
+    emoji: '🌰',
+    items: ['chestnut', 'makgeolli'],
+    desc: '노릇노릇 달콤한 공주 정안알밤의 고소함이 톡 쏘는 막걸리에 듬뿍 녹아든 디저트 탁주.'
+  },
+  {
+    id: 'pine-mak',
+    name: '가평 잣 솔잎 막걸리',
+    category: '탁주/약주',
+    emoji: '🌲',
+    items: ['makgeolli', 'pine'],
+    desc: '울창한 숲의 청정 솔잎과 가평 잣의 진한 향이 어우러져 목넘김이 산뜻하고 상쾌한 막걸리.'
+  },
+  {
+    id: 'yuzu-mak',
+    name: '고흥 생유자 막걸리',
+    category: '탁주/약주',
+    emoji: '🍋',
+    items: ['makgeolli', 'yuzu'],
+    desc: '남해안 햇살을 머금은 노란 생유자 과즙을 듬뿍 넣어 비타민 가득 상큼하게 터지는 퓨전 막걸리.'
+  },
+  {
+    id: 'duteot-mak',
+    name: '느린마을 막걸리 봄',
+    category: '탁주/약주',
+    emoji: '🥛',
+    items: ['pear', 'rice', 'yeast'],
+    desc: '오직 쌀과 누룩, 물만으로 빚어 신선하고 달콤한 사과·배향이 살아있는 청량한 생탁주.'
+  },
+  {
+    id: 'omija-mak',
+    name: '문경 오미자 생막걸리',
+    category: '탁주/약주',
+    emoji: '🍒',
+    items: ['makgeolli', 'omija'],
+    desc: '문경 오미자의 새콤달콤한 5가지 맛과 발그레한 루비빛 거품이 매력적인 감각적인 막걸리.'
+  },
+  {
+    id: 'barley-mak',
+    name: '보리술 군산 막걸리',
+    category: '탁주/약주',
+    emoji: '🌾',
+    items: ['barley', 'makgeolli'],
+    desc: '흰 쌀 대신 구수한 찰보리를 발효시켜 할머니 손맛 같은 구수함과 담백함을 전하는 토속주.'
+  },
+  {
+    id: 'ginger-mak',
+    name: '봉동 생강 탁주',
+    category: '탁주/약주',
+    emoji: '🫚',
+    items: ['ginger', 'makgeolli'],
+    desc: '알싸하고 따뜻한 생강 기운이 은은하게 퍼져 겨울철 온몸을 녹여주는 전통 보양 탁주.'
+  },
+  {
+    id: 'honey-rice-mak',
+    name: '김포 금쌀 꿀탁주',
+    category: '탁주/약주',
+    emoji: '🍯',
+    items: ['honey', 'makgeolli', 'rice'],
+    desc: '윤기 흐르는 김포 금쌀에 아카시아 벌꿀을 가미하여 첫맛은 부드럽고 끝맛은 달콤한 막걸리.'
+  },
+  {
+    id: 'guk-mak',
+    name: '국화 생탁주',
+    category: '탁주/약주',
+    emoji: '🌼',
+    items: ['chrysanthemum', 'makgeolli'],
+    desc: '가을 국화 꽃잎을 탁주 덧술에 띄워 쌉싸래한 감칠맛과 청량한 꽃향기를 더한 풍류 탁주.'
+  },
+  {
+    id: 'plum-mak',
+    name: '광양 청매실 막걸리',
+    category: '탁주/약주',
+    emoji: '🟢',
+    items: ['makgeolli', 'plum'],
+    desc: '새콤한 유기산이 풍부한 청매실 원액을 넣어 소화를 돕고 입안을 개운하게 해주는 건강 탁주.'
+  },
+  {
+    id: 'dami-mak',
+    name: '담양 대잎 막걸리',
+    category: '탁주/약주',
+    emoji: '🎋',
+    items: ['makgeolli', 'pine', 'water'],
+    desc: '대나무 숲의 맑은 이슬과 솔잎 향을 더해 푸른 빛 감도는 청량감을 담은 전남의 명물 탁주.'
+  },
+  {
+    id: 'jeju-citrus-mak',
+    name: '제주 감귤 생막걸리',
+    category: '탁주/약주',
+    emoji: '🍊',
+    items: ['cider', 'makgeolli', 'yuzu'],
+    desc: '달콤한 감귤과 사이다의 청량함이 만나 제주도 해변에서 즐기는 상큼한 열대풍 막걸리.'
+  },
+
+  // --- [6] 지역특산 과실주 및 리큐르 (15종) ---
+  {
+    id: 'bokbunjaju',
+    name: '고창 선운산 복분자주',
+    category: '과실주',
+    emoji: '🍷',
+    items: ['bokbunja', 'honey', 'soju'],
+    desc: '마시면 요강이 뒤집어진다는 전설의 보양 과실주! 짙은 루비빛 달콤함.'
+  },
+  {
+    id: 'insamju',
+    name: '금산 수삼 인삼주',
+    category: '과실주',
+    emoji: '🪴',
+    items: ['ginseng', 'honey', 'soju'],
+    desc: '뿌리째 담근 진한 사포닌의 향연! 한 잔 마시면 몸에서 열이 나는 한국 전통 약용주.'
+  },
+  {
+    id: 'maehwasu',
+    name: '달콤한 매화수',
+    category: '과실주',
+    emoji: '🟢',
+    items: ['plum', 'soju'],
+    desc: '청매실 원액을 화이트 와인과 블렌딩하여 부드럽고 산뜻한 달콤함을 자랑하는 청춘의 과실주.'
+  },
+  {
+    id: 'omija-wine',
+    name: '문경 오미로제 스파클링',
+    category: '과실주',
+    emoji: '🍾',
+    items: ['honey', 'omija', 'water'],
+    desc: '문경 친환경 오미자를 정통 샴페인 제조법으로 빚어 세계 정상회담 공식 만찬주로 선정된 명작.'
+  },
+  {
+    id: 'yuzu-soju',
+    name: '순하리 처음처럼 유자',
+    category: '과실주',
+    emoji: '🍋',
+    items: ['soju', 'yuzu'],
+    desc: '주류계에 과일 소주 열풍을 일으킨 원조! 상큼한 유자 과즙과 부드러운 알코올의 완벽한 조화.'
+  },
+  {
+    id: 'seoljungmae',
+    name: '설중매 골드',
+    category: '과실주',
+    emoji: '🟢',
+    items: ['honey', 'plum', 'soju'],
+    desc: '병 안에 진짜 왕매실이 통째로! 순금 가루가 흩날리는 고급스러운 한국 대표 매실 명주.'
+  },
+  {
+    id: 'grape-soju',
+    name: '청포도에 이슬',
+    category: '과실주',
+    emoji: '🍇',
+    items: ['cider', 'honey', 'soju'],
+    desc: '달콤한 청포도 과즙과 사이다의 톡 쏘는 상쾌함을 담아 해외에서도 폭발적 인기를 끈 K-과실주.'
+  },
+  {
+    id: 'gam-wine',
+    name: '청도 감와인 레귤러',
+    category: '과실주',
+    emoji: '🍷',
+    items: ['honey', 'pear', 'water'],
+    desc: '청도 반시의 떫은맛 탄닌을 감미롭게 변화시켜 와인터널에서 숙성한 대한민국 최초 감와인.'
+  },
+  {
+    id: 'apple-wine',
+    name: '예산 사과와인 추사 40',
+    category: '과실주',
+    emoji: '🍎',
+    items: ['pear', 'water', 'yeast'],
+    desc: '예산의 황토 사과를 물과 효모로 순수 발효해 칼바도스 방식으로 증류·숙성한 황금빛 애플 브랜디.'
+  },
+  {
+    id: 'bokbunja-pure',
+    name: '지리산 복분자 원액주',
+    category: '과실주',
+    emoji: '🫐',
+    items: ['bokbunja', 'water', 'yeast'],
+    desc: '야생 복분자를 물과 효모로 순수 저온 발효하여 깊은 보랏빛 산미와 천연 항산화 성분을 농축.'
+  },
+  {
+    id: 'pear-liqueur',
+    name: '나주 배 리큐르',
+    category: '과실주',
+    emoji: '🍐',
+    items: ['honey', 'pear', 'tonic'],
+    desc: '당도 높은 나주배 과즙에 맑은 토닉과 벌꿀을 섞어 달콤하고 시원한 갈증 해소를 선사하는 술.'
+  },
+  {
+    id: 'omija-soju',
+    name: '붉은빛 오미자 담금주',
+    category: '과실주',
+    emoji: '🍒',
+    items: ['omija', 'soju'],
+    desc: '소주에 건오미자를 100일간 침출하여 다섯 가지 오묘한 풍미를 우려낸 가정식 보양 담금주.'
+  },
+  {
+    id: 'ginger-wine',
+    name: '안동 생강 진저와인',
+    category: '과실주',
+    emoji: '🫚',
+    items: ['ginger', 'honey', 'water'],
+    desc: '한국산 토종 생강의 알싸함을 벌꿀로 다스려 감기 기운을 날려주는 전통 온기 리큐르.'
+  },
+  {
+    id: 'pine-wine',
+    name: '설악 송순 과실주',
+    category: '과실주',
+    emoji: '🌲',
+    items: ['pine', 'soju', 'tonic'],
+    desc: '봄철 돋아난 어린 소나무 순을 소주와 토닉에 우려내 숲속의 피톤치드를 마시는 듯한 청량주.'
+  },
+  {
+    id: 'chrys-wine',
+    name: '설악 감국 꽃향주',
+    category: '과실주',
+    emoji: '🌼',
+    items: ['chrysanthemum', 'honey', 'tonic'],
+    desc: '말린 국화꽃과 꿀, 토닉워터를 조화롭게 침출하여 화사한 꽃내음이 입안 가득 맴도는 파티주.'
+  }
+];
+
+// 상태 관리 (안전한 LocalStorage 스키마 검증 및 역직렬화 적용)
+let selectedIngredients = [];
+let unlockedIds = ['somaek'];
+try {
+  const saved = localStorage.getItem('ksool_unlocked');
+  if (saved) {
+    const parsed = JSON.parse(saved);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      unlockedIds = parsed.filter(id => typeof id === 'string' && RECIPES.some(r => r.id === id));
+      if (!unlockedIds.includes('somaek')) unlockedIds.unshift('somaek');
+    }
+  }
+} catch (e) {
+  unlockedIds = ['somaek'];
+}
+let currentCategory = '전체';
+
+// 사운드 합성 (Web Audio API)
+let audioCtx = null;
+function getAudioContext() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+  return audioCtx;
+}
+
+function playSound(type) {
+  try {
+    const ctx = getAudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (type === 'tap') {
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.05);
+    } else if (type === 'success') {
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.3);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+      if (navigator.vibrate) navigator.vibrate([40, 60, 100]);
+    } else if (type === 'fail') {
+      osc.frequency.setValueAtTime(220, ctx.currentTime);
+      osc.frequency.setValueAtTime(180, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.25);
+    }
+  } catch (e) {}
+}
+
+// 렌더링: 재료 목록
+function renderIngredients() {
+  const grid = document.getElementById('ingredients-grid');
+  grid.innerHTML = INGREDIENTS.map(ing => {
+    const isSelected = selectedIngredients.includes(ing.id);
+    return `
+      <div class="ing-card ${isSelected ? 'selected' : ''}" onclick="toggleIngredient('${ing.id}')">
+        <span class="ing-emoji">${ing.emoji}</span>
+        <span class="ing-name">${ing.name}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+// 재료 토글
+function toggleIngredient(id) {
+  playSound('tap');
+  const index = selectedIngredients.indexOf(id);
+  if (index > -1) {
+    selectedIngredients.splice(index, 1);
+  } else {
+    if (selectedIngredients.length >= 3) {
+      alert('재료는 최대 3개까지만 조합할 수 있습니다.');
+      return;
+    }
+    selectedIngredients.push(id);
+  }
+  updateSelectionUI();
+  renderIngredients();
+}
+
+function clearSelection() {
+  selectedIngredients = [];
+  updateSelectionUI();
+  renderIngredients();
+}
+
+function updateSelectionUI() {
+  const chipsContainer = document.getElementById('selected-chips');
+  const mixBtn = document.getElementById('mix-btn');
+  const cauldron = document.getElementById('cauldron');
+  const potSlots = document.getElementById('pot-slots');
+
+  if (selectedIngredients.length === 0) {
+    chipsContainer.innerHTML = '<span style="font-size: 0.8rem; color: #94a3b8; line-height: 32px; font-weight: 600;">하단에서 재료를 2~3개 선택하세요</span>';
+    mixBtn.disabled = true;
+    cauldron.classList.remove('has-items');
+    potSlots.innerHTML = '<span style="font-size: 2.2rem; opacity: 0.4;">🍶</span>';
+  } else {
+    chipsContainer.innerHTML = selectedIngredients.map(id => {
+      const ing = INGREDIENTS.find(i => i.id === id);
+      return `<div class="chip"><span>${ing.emoji}</span> ${ing.name} <button onclick="toggleIngredient('${id}')">×</button></div>`;
+    }).join('');
+
+    potSlots.innerHTML = selectedIngredients.map(id => {
+      const ing = INGREDIENTS.find(i => i.id === id);
+      return `<span class="slot-icon">${ing.emoji}</span>`;
+    }).join('');
+
+    cauldron.classList.add('has-items');
+    mixBtn.disabled = selectedIngredients.length < 2;
+  }
+}
+
+// 조합(술 빚기) 실행
+function craftSool() {
+  const currentSet = [...selectedIngredients].sort();
+  
+  // 일치 레시피 탐색 (100% Unique Sorted Key 매칭)
+  const matched = RECIPES.find(r => {
+    const rSet = [...r.items].sort();
+    return rSet.length === currentSet.length && rSet.every((val, idx) => val === currentSet[idx]);
+  });
+
+  if (matched) {
+    playSound('success');
+    if (!unlockedIds.includes(matched.id)) {
+      unlockedIds.push(matched.id);
+      localStorage.setItem('ksool_unlocked', JSON.stringify(unlockedIds));
+      updateProgress();
+    }
+    showResultModal(matched, true);
+  } else {
+    playSound('fail');
+    showResultModal({
+      name: '괴식 폭탄주 (조합 실패)',
+      category: '조합 실패',
+      emoji: '🧪',
+      desc: '으악! 이 맛은 도저히 사람이 마실 수 없는 이상한 혼합물입니다... 다른 재료의 조화를 연구해보세요!',
+      recipeStr: selectedIngredients.map(id => {
+        const found = INGREDIENTS.find(i => i.id === id);
+        return found ? found.name : id;
+      }).join(' + ')
+    }, false);
+  }
+
+  clearSelection();
+}
+
+// 결과 모달 표시 (XSS 방지를 위해 textContent 안전 대입)
+function showResultModal(item, isSuccess) {
+  const modal = document.getElementById('modal');
+  document.getElementById('res-tag').textContent = item.category;
+  document.getElementById('res-emoji').textContent = item.emoji;
+  document.getElementById('res-title').textContent = item.name;
+  document.getElementById('res-desc').textContent = item.desc;
+  
+  const recipeText = item.items 
+    ? '성공 레시피: ' + item.items.map(id => {
+        const found = INGREDIENTS.find(i => i.id === id);
+        return found ? found.name : id;
+      }).join(' + ')
+    : '시도한 재료: ' + item.recipeStr;
+  document.getElementById('res-recipe').textContent = recipeText;
+
+  modal.classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('active');
+  renderCollection();
+}
+
+// 도감 렌더링
+function renderCollection() {
+  const grid = document.getElementById('sool-grid');
+  const filtered = currentCategory === '전체' 
+    ? RECIPES 
+    : RECIPES.filter(r => r.category.includes(currentCategory));
+
+  grid.innerHTML = filtered.map(item => {
+    const isUnlocked = unlockedIds.includes(item.id);
+    return `
+      <div class="sool-card ${isUnlocked ? '' : 'locked'}" onclick="${isUnlocked ? `showResultModal(RECIPES.find(r=>r.id==='${item.id}'), true)` : `alert('아직 발견하지 못한 비전의 명주입니다! 주조실에서 새로운 재료를 조합해보세요.')`}">
+        <span class="sool-emoji">${isUnlocked ? item.emoji : '❓'}</span>
+        <span class="sool-name">${isUnlocked ? item.name : '미지의 술'}</span>
+        <span class="sool-tag">${item.category}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function filterCategory(cat) {
+  playSound('tap');
+  currentCategory = cat;
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.innerText.includes(cat));
+  });
+  renderCollection();
+}
+
+function switchTab(tab) {
+  playSound('tap');
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+
+  if (tab === 'brew') {
+    document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
+    document.getElementById('view-brew').classList.add('active');
+  } else {
+    document.querySelector('.tab-btn:nth-child(2)').classList.add('active');
+    document.getElementById('view-collection').classList.add('active');
+    renderCollection();
+  }
+}
+
+function updateProgress() {
+  document.getElementById('unlocked-count').textContent = unlockedIds.length;
+}
+
+// 데이터 정합성 자체 검증 루틴 (DB 무결성 보장: 100종 일치 및 충돌 0건 보장)
+(function validateDatabaseIntegrity() {
+  const ingIds = new Set(INGREDIENTS.map(i => i.id));
+  const recipeSets = new Map();
+  let errorsFound = 0;
+  
+  if (RECIPES.length !== 100) {
+    console.error(`[DBA ALERT] RECIPES count is ${RECIPES.length}, expected exactly 100!`);
+    errorsFound++;
+  }
+  
+  RECIPES.forEach((r, idx) => {
+    // 1. 모든 재료가 INGREDIENTS에 실재하는지 검증
+    r.items.forEach(itemId => {
+      if (!ingIds.has(itemId)) {
+        console.error(`[DBA ALERT] Invalid ingredient '${itemId}' in recipe '${r.id}'`);
+        errorsFound++;
+      }
+    });
+    // 2. 조합 레시피 중복(Collision) 여부 검증
+    const sortedKey = [...r.items].sort().join('+');
+    if (recipeSets.has(sortedKey)) {
+      console.error(`[DBA ALERT] Duplicate recipe combination key detected: ${sortedKey} (collision between '${recipeSets.get(sortedKey)}' and '${r.id}')`);
+      errorsFound++;
+    } else {
+      recipeSets.set(sortedKey, r.id);
+    }
+  });
+
+  if (errorsFound === 0) {
+    console.log(`%c[DBA 무결성 검증 통과] 100종의 레시피 조합식 키가 100% 고유(Unique)하며 정합성이 확보되었습니다.`, "color: #38bdf8; font-weight: bold;");
+  }
+})();
+
+// 초기 구동
+renderIngredients();
+renderCollection();
+updateProgress();
+</script>
+</body>
+</html>

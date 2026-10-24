@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { eventBroker } from './eventBroker.js';
+import { WORKSPACE_DIR, PROJECTS_DIR } from './projectManager.js';
 
-const MINUTES_PATH = path.resolve(process.cwd(), '..', 'workspace_output', 'meeting_minutes.json');
+const MINUTES_PATH = path.resolve(WORKSPACE_DIR, 'meeting_minutes.json');
 
 // 완전히 깨끗한 상태 (더미/테스트 데이터 없음)
 let currentMeeting = null;
@@ -27,11 +28,12 @@ export function resetMeetingState() {
 }
 
 // 1. 회의 소집 (안건과 관련된 에이전트만 소집)
-export function startMeeting({ title, topic, attendees }) {
+export function startMeeting({ title, topic, attendees, projectId }) {
   currentMeeting = {
     id: `meet-${Date.now()}`,
     title,
     topic,
+    projectId: projectId || null,
     startedAt: Date.now(),
     attendees: attendees || [],
     dialogues: [],
@@ -41,6 +43,13 @@ export function startMeeting({ title, topic, attendees }) {
   eventBroker.publish('meeting_started', currentMeeting);
   saveMinutesToDisk();
   return currentMeeting;
+}
+
+export function setMeetingProjectId(projectId) {
+  if (currentMeeting) {
+    currentMeeting.projectId = projectId;
+    saveMinutesToDisk();
+  }
 }
 
 // 2. 에이전트 발언 기록
@@ -117,7 +126,7 @@ function saveMinutesToDisk() {
     fs.writeFileSync(MINUTES_PATH, JSON.stringify(data, null, 2), 'utf-8');
 
     if (currentMeeting && currentMeeting.dialogues.length > 0) {
-      const mdPath = path.resolve(process.cwd(), '..', 'workspace_output', '회의록_최신.md');
+      const mdPath = path.resolve(WORKSPACE_DIR, '회의록_최신.md');
       let md = `# 📋 경영진 보고용 회의록: ${currentMeeting.title}\n\n`;
       md += `- **회의 안건**: ${currentMeeting.topic}\n`;
       md += `- **소집된 관련자**: ${currentMeeting.attendees.join(', ')}\n`;
@@ -133,6 +142,13 @@ function saveMinutesToDisk() {
         });
       }
       fs.writeFileSync(mdPath, md, 'utf-8');
+
+      // 만약 projectId가 지정되어 있으면 해당 프로젝트 docs에도 저장
+      if (currentMeeting.projectId) {
+        const projDocs = path.resolve(PROJECTS_DIR, currentMeeting.projectId, 'docs');
+        if (!fs.existsSync(projDocs)) fs.mkdirSync(projDocs, { recursive: true });
+        fs.writeFileSync(path.join(projDocs, 'MEETING_MINUTES.md'), md, 'utf-8');
+      }
     }
   } catch (err) {}
 }

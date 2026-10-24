@@ -1,0 +1,9 @@
+{
+  "id": "ksool_game",
+  "name": "한국의 술 도감 게임",
+  "description": "한국 전통주 및 지역 특산주 도감 수집 및 퀴즈 2D 인터랙티브 웹 게임",
+  "category": "game",
+  "entrypoint": "index.html",
+  "createdAt": "2026-10-24T23:03:26.365Z",
+  "updatedAt": "2026-10-24T23:03:26.366Z"
+}

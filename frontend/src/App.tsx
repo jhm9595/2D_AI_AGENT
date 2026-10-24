@@ -24,8 +24,38 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
-  Briefcase
+  Briefcase,
+  FileText,
+  Database,
+  FolderGit2,
+  ChevronRight
 } from 'lucide-react';
+
+export interface ProjectArtifactFile {
+  name: string;
+  relPath: string;
+  subpath: string;
+  size: number;
+  updatedAt: string;
+  projectId: string;
+}
+
+export interface ProjectData {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  entrypoint: string;
+  createdAt: string;
+  updatedAt: string;
+  projectPath?: string;
+  files: {
+    apps: ProjectArtifactFile[];
+    docs: ProjectArtifactFile[];
+    data: ProjectArtifactFile[];
+    others: ProjectArtifactFile[];
+  };
+}
 
 export default function App() {
   const wsUrl = `ws://${window.location.hostname}:4000/ws/agent-events`;
@@ -51,8 +81,10 @@ export default function App() {
   const [pendingDecisions, setPendingDecisions] = useState<DecisionItem[]>([]);
   const [decisionHistory, setDecisionHistory] = useState<DecisionItem[]>([]);
 
-  // 워크스페이스에 생성된 산출물 파일 목록
+  // 워크스페이스에 생성된 산출물 파일 및 프로젝트 목록
   const [workspaceFiles, setWorkspaceFiles] = useState<Array<{ name: string; size: number; updatedAt: string }>>([]);
+  const [projects, setProjects] = useState<ProjectData[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [selectedFileContent, setSelectedFileContent] = useState<{ name: string; content: string; fullPath?: string } | null>(null);
 
   // 실시간 대화형 앱/게임 플레이어 모달 (iframe 프리뷰)
@@ -103,6 +135,7 @@ export default function App() {
       const res = await fetch('http://localhost:4000/api/workspace/files');
       const data = await res.json();
       if (data.files) setWorkspaceFiles(data.files);
+      if (data.projects) setProjects(data.projects);
     } catch (err) {
       console.error(err);
     }
@@ -195,23 +228,28 @@ export default function App() {
     }
   };
 
-  // Windows 폴더 열기
-  const handleOpenFolder = async () => {
+  // Windows 폴더 열기 (특정 프로젝트 폴더 지정 지원)
+  const handleOpenFolder = async (projId?: string) => {
     try {
-      await fetch('http://localhost:4000/api/workspace/open-folder', { method: 'POST' });
+      const targetProj = projId || (selectedProjectId !== 'all' ? selectedProjectId : undefined);
+      await fetch('http://localhost:4000/api/workspace/open-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: targetProj })
+      });
     } catch (err) {
       console.error(err);
     }
   };
 
-  // 기본 프로그램으로 파일 열기
-  const handleLaunchFile = async (name: string, e?: React.MouseEvent) => {
+  // 기본 프로그램으로 파일 열기 (프로젝트 상대경로 지원)
+  const handleLaunchFile = async (pathOrName: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     try {
       await fetch('http://localhost:4000/api/workspace/launch-file', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name })
+        body: JSON.stringify({ path: pathOrName })
       });
     } catch (err) {
       console.error(err);
@@ -219,11 +257,13 @@ export default function App() {
   };
 
   // 대시보드 안에서 실시간 게임/웹앱 실행 (캐시 방지 타임스탬프 포함)
-  const handlePlayGame = (filename: string, title?: string, e?: React.MouseEvent) => {
+  const handlePlayGame = (relPathOrName: string, title?: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setActivePlayFilename(filename);
-    setActivePlayUrl(`http://localhost:4000/api/workspace/file?name=${encodeURIComponent(filename)}&render=html&t=${Date.now()}`);
-    setActivePlayTitle(title || filename);
+    setActivePlayFilename(relPathOrName);
+    setActivePlayUrl(
+      `http://localhost:4000/api/workspace/file?path=${encodeURIComponent(relPathOrName)}&render=html&t=${Date.now()}`
+    );
+    setActivePlayTitle(title || relPathOrName);
   };
 
   const handleRunAgentTask = async (e: React.FormEvent) => {
@@ -253,9 +293,9 @@ export default function App() {
     }
   };
 
-  const handleViewFile = async (name: string) => {
+  const handleViewFile = async (pathOrName: string) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/workspace/file?name=${encodeURIComponent(name)}`);
+      const res = await fetch(`http://localhost:4000/api/workspace/file?path=${encodeURIComponent(pathOrName)}`);
       const data = await res.json();
       setSelectedFileContent(data);
     } catch (err) {
@@ -497,26 +537,27 @@ export default function App() {
             workflowStatus={workflowStatus}
           />
 
-          {/* 에이전트 작업 산출물 파일 보관함 */}
+          {/* 🗂️ 프로젝트별 산출물 보관함 (Project Artifacts Hub) */}
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 shadow-xl flex flex-col gap-3">
+            {/* 상단 헤더 */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
               <div className="flex items-center gap-2">
-                <FolderOpen className="w-4 h-4 text-amber-400" />
+                <FolderGit2 className="w-4 h-4 text-amber-400" />
                 <span className="text-xs font-bold text-slate-200">
-                  에이전트 실제 산출물 보관함
+                  프로젝트별 산출물 보관함
                 </span>
                 <span className="text-[10px] bg-indigo-900/40 text-indigo-300 px-1.5 py-0.5 rounded font-mono">
-                  {workspaceFiles.length}개
+                  {projects.length}개 프로젝트 ({workspaceFiles.length}개 파일)
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={handleOpenFolder}
-                  className="flex items-center gap-1 text-[11px] text-indigo-300 hover:text-white bg-indigo-950/60 hover:bg-indigo-900/80 px-2 py-1 rounded border border-indigo-700/60 transition cursor-pointer"
-                  title="내 컴퓨터 탐색기로 결과물 폴더 직접 열기"
+                  onClick={() => handleOpenFolder(selectedProjectId !== 'all' ? selectedProjectId : undefined)}
+                  className="flex items-center gap-1 text-[11px] text-indigo-300 hover:text-white bg-indigo-950/60 hover:bg-indigo-900/80 px-2.5 py-1 rounded border border-indigo-700/60 transition cursor-pointer"
+                  title={selectedProjectId !== 'all' ? `선택된 [${selectedProjectId}] 프로젝트 폴더를 탐색기로 열기` : '전체 워크스페이스 폴더 열기'}
                 >
                   <FolderCheck className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>탐색기 열기</span>
+                  <span>{selectedProjectId !== 'all' ? '이 프로젝트 폴더 열기' : '탐색기 열기'}</span>
                 </button>
                 <button
                   onClick={fetchWorkspaceFiles}
@@ -528,64 +569,196 @@ export default function App() {
               </div>
             </div>
 
-            {workspaceFiles.length === 0 ? (
-              <div className="text-xs text-slate-500 py-4 text-center">
-                아직 생성된 파일이 없습니다. 좌측에서 작업을 지시해보세요!
+            {/* 프로젝트 선택 탭 (Project Selector) */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+              <button
+                onClick={() => setSelectedProjectId('all')}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition shrink-0 cursor-pointer ${
+                  selectedProjectId === 'all'
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                }`}
+              >
+                전체 프로젝트 ({projects.length})
+              </button>
+              {projects.map((proj) => (
+                <button
+                  key={proj.id}
+                  onClick={() => setSelectedProjectId(proj.id)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
+                    selectedProjectId === proj.id
+                      ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                      : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <span>📁</span>
+                  <span>{proj.name || proj.id}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* 프로젝트 목록 및 하위 문서/앱 뷰어 */}
+            {projects.length === 0 ? (
+              <div className="text-xs text-slate-500 py-6 text-center">
+                아직 생성된 프로젝트가 없습니다. 좌측에서 새 프로젝트나 게임 개발을 지시해보세요!
               </div>
             ) : (
-              <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
-                {workspaceFiles.map((file, idx) => {
-                  const isHtmlApp = file.name.endsWith('.html');
-
+              <div className="flex flex-col gap-3 max-h-[460px] overflow-y-auto pr-1">
+                {(selectedProjectId === 'all' ? projects : projects.filter((p) => p.id === selectedProjectId)).map((proj) => {
                   return (
                     <div
-                      key={file.name}
-                      onClick={() => handleViewFile(file.name)}
-                      className={`flex items-center justify-between p-2.5 rounded bg-slate-900 hover:bg-slate-800 text-left border transition cursor-pointer ${
-                        isHtmlApp ? 'border-amber-500/50 bg-amber-950/15' : idx === 0 ? 'border-indigo-500/50 bg-indigo-950/20' : 'border-slate-800/80'
-                      }`}
+                      key={proj.id}
+                      className="rounded-lg border border-slate-800/90 bg-slate-900/60 p-3 flex flex-col gap-2.5 hover:border-slate-700 transition"
                     >
-                      <div className="flex items-center gap-2 truncate flex-1 mr-2">
-                        {isHtmlApp ? (
-                          <Gamepad2 className="w-4 h-4 text-amber-400 shrink-0" />
-                        ) : (
-                          <FileCode className={`w-4 h-4 shrink-0 ${idx === 0 ? 'text-indigo-400' : 'text-slate-400'}`} />
-                        )}
-                        <div className="truncate">
-                          <div className="text-xs font-mono text-slate-200 font-bold truncate flex items-center gap-1.5">
-                            {file.name}
-                            {isHtmlApp && (
-                              <span className="text-[9px] bg-amber-500 text-slate-950 font-bold px-1.5 py-0.5 rounded">
-                                실행 가능 웹앱
-                              </span>
-                            )}
+                      {/* 프로젝트 요약 헤더 */}
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <div className="truncate mr-2">
+                          <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5 truncate">
+                            <span className="font-mono text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-400 font-normal">
+                              {proj.id}
+                            </span>
+                            <span>{proj.name}</span>
                           </div>
-                          <div className="text-[10px] text-slate-500">
-                            {new Date(file.updatedAt).toLocaleTimeString()} • {(file.size / 1024).toFixed(1)} KB
+                          <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                            {proj.description}
                           </div>
                         </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {isHtmlApp && (
-                          <button
-                            onClick={(e) => handlePlayGame(file.name, file.name, e)}
-                            className="text-[11px] font-bold text-amber-300 hover:text-white px-2.5 py-1 bg-amber-600/40 hover:bg-amber-600 rounded border border-amber-500/60 transition flex items-center gap-1 cursor-pointer"
-                            title="대시보드 안에서 즉시 실행하기"
-                          >
-                            <Play className="w-3 h-3 fill-current" />
-                            <span>실행하기</span>
-                          </button>
-                        )}
                         <button
-                          onClick={(e) => handleLaunchFile(file.name, e)}
-                          className="text-[11px] text-slate-400 hover:text-white px-2 py-1 bg-slate-800 hover:bg-indigo-600 rounded border border-slate-700 transition flex items-center gap-1 cursor-pointer"
-                          title="새 브라우저 창으로 크게 열기"
+                          onClick={() => handleOpenFolder(proj.id)}
+                          className="text-[10px] text-slate-400 hover:text-amber-300 px-2 py-0.5 rounded border border-slate-700/80 hover:border-amber-500/50 flex items-center gap-1 shrink-0 cursor-pointer bg-slate-900"
+                          title="이 프로젝트 폴더만 탐색기로 열기"
                         >
-                          <ExternalLink className="w-3 h-3" />
-                          <span>창 열기</span>
+                          <FolderOpen className="w-3 h-3 text-amber-400" />
+                          <span>폴더 열기</span>
                         </button>
                       </div>
+
+                      {/* 1. 🎮 실행 웹앱 / 게임 (Apps) */}
+                      {proj.files.apps && proj.files.apps.length > 0 && (
+                        <div className="flex flex-col gap-1.5">
+                          <div className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                            <Gamepad2 className="w-3.5 h-3.5 text-amber-400" />
+                            <span>실행 웹앱 / 게임</span>
+                          </div>
+                          {proj.files.apps.map((app) => (
+                            <div
+                              key={app.relPath}
+                              className="flex items-center justify-between p-2 rounded bg-amber-950/20 border border-amber-500/40 hover:bg-amber-950/30 transition"
+                            >
+                              <div
+                                onClick={() => handleViewFile(app.relPath)}
+                                className="flex items-center gap-2 truncate flex-1 cursor-pointer mr-2"
+                              >
+                                <FileCode className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                <div className="truncate">
+                                  <div className="text-xs font-mono font-bold text-amber-200 truncate flex items-center gap-1.5">
+                                    <span>{app.name}</span>
+                                    <span className="text-[9px] bg-amber-500 text-slate-950 font-bold px-1.5 py-0.2 rounded font-sans">
+                                      실행 가능
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-400">
+                                    {(app.size / 1024).toFixed(1)} KB • {new Date(app.updatedAt).toLocaleTimeString()}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  onClick={(e) => handlePlayGame(app.relPath, proj.name, e)}
+                                  className="text-[11px] font-bold text-amber-300 hover:text-white px-2.5 py-1 bg-amber-600/40 hover:bg-amber-600 rounded border border-amber-500/60 transition flex items-center gap-1 cursor-pointer"
+                                  title="대시보드 안에서 즉시 실행"
+                                >
+                                  <Play className="w-3 h-3 fill-current" />
+                                  <span>실행하기</span>
+                                </button>
+                                <button
+                                  onClick={(e) => handleLaunchFile(app.relPath, e)}
+                                  className="text-[11px] text-slate-400 hover:text-white px-2 py-1 bg-slate-800 hover:bg-indigo-600 rounded border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                                  title="새 창으로 열기"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  <span>창 열기</span>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 2. 📋 기획 및 아키텍처 문서 (docs/) */}
+                      {proj.files.docs && proj.files.docs.length > 0 && (
+                        <div className="flex flex-col gap-1.5 pt-1">
+                          <div className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                            <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>기획 & 아키텍처 문서 (docs/)</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            {proj.files.docs.map((doc) => {
+                              const isPrd = doc.name.includes('PRD');
+                              const isWbs = doc.name.includes('WBS');
+                              const isSec = doc.name.includes('SECURITY');
+                              const isQa = doc.name.includes('QA');
+
+                              return (
+                                <div
+                                  key={doc.relPath}
+                                  onClick={() => handleViewFile(doc.relPath)}
+                                  className="flex items-center justify-between p-2 rounded bg-slate-950/80 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-900 transition cursor-pointer"
+                                >
+                                  <div className="flex items-center gap-1.5 truncate flex-1 mr-1">
+                                    <FileText className={`w-3.5 h-3.5 shrink-0 ${isPrd ? 'text-purple-400' : isWbs ? 'text-blue-400' : isSec ? 'text-rose-400' : isQa ? 'text-emerald-400' : 'text-indigo-400'}`} />
+                                    <div className="truncate">
+                                      <div className="text-[11px] font-mono font-bold text-slate-200 truncate flex items-center gap-1">
+                                        <span>{doc.name}</span>
+                                        <span className={`text-[9px] px-1 py-0.2 rounded font-sans ${isPrd ? 'bg-purple-950 text-purple-300' : isWbs ? 'bg-blue-950 text-blue-300' : isSec ? 'bg-rose-950 text-rose-300' : isQa ? 'bg-emerald-950 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>
+                                          {isPrd ? '기획서' : isWbs ? 'WBS' : isSec ? '보안감사' : isQa ? 'QA성적서' : '문서'}
+                                        </span>
+                                      </div>
+                                      <div className="text-[9px] text-slate-500">
+                                        {(doc.size / 1024).toFixed(1)} KB
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <ChevronRight className="w-3 h-3 text-slate-600 shrink-0" />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 3. 🗄️ 데이터 & 스키마 (data/) */}
+                      {proj.files.data && proj.files.data.length > 0 && (
+                        <div className="flex flex-col gap-1.5 pt-1">
+                          <div className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                            <Database className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>데이터 & 스키마 (data/)</span>
+                          </div>
+                          {proj.files.data.map((dat) => (
+                            <div
+                              key={dat.relPath}
+                              onClick={() => handleViewFile(dat.relPath)}
+                              className="flex items-center justify-between p-2 rounded bg-slate-950/80 border border-slate-800 hover:border-emerald-500/50 hover:bg-slate-900 transition cursor-pointer"
+                            >
+                              <div className="flex items-center gap-1.5 truncate flex-1 mr-1">
+                                <Database className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                <div className="truncate">
+                                  <div className="text-[11px] font-mono font-bold text-emerald-300 truncate flex items-center gap-1">
+                                    <span>{dat.name}</span>
+                                    <span className="text-[9px] bg-emerald-950 text-emerald-300 px-1 py-0.2 rounded font-sans">
+                                      DBA DDL
+                                    </span>
+                                  </div>
+                                  <div className="text-[9px] text-slate-500">
+                                    {(dat.size / 1024).toFixed(1)} KB
+                                  </div>
+                                </div>
+                              </div>
+                              <ChevronRight className="w-3 h-3 text-slate-600 shrink-0" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -657,7 +830,7 @@ export default function App() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => handleLaunchFile(selectedFileContent.name)}
+                  onClick={() => handleLaunchFile((selectedFileContent as any).relPath || selectedFileContent.name)}
                   className="flex items-center gap-1.5 text-xs text-indigo-300 hover:text-white px-3 py-1 bg-indigo-950 rounded border border-indigo-700 cursor-pointer"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />

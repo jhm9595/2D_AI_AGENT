@@ -18,8 +18,15 @@ import {
 } from './gemini/geminiAgent.js';
 import { getAgentsRegistry, addCustomAgent, removeCustomAgent } from './agentRegistry.js';
 import { getMeetingState, resolveDecision, resetMeetingState } from './meetingManager.js';
+import {
+  WORKSPACE_DIR,
+  PROJECTS_DIR,
+  listProjectsWithArtifacts,
+  ensureProjectsDir
+} from './projectManager.js';
 
 dotenv.config();
+ensureProjectsDir();
 
 const app = express();
 app.use(cors());
@@ -27,8 +34,6 @@ app.use(express.json());
 
 const server = http.createServer(app);
 eventBroker.attach(server);
-
-const WORKSPACE_DIR = path.resolve(process.cwd(), '..', 'workspace_output');
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -114,21 +119,45 @@ app.post('/api/office/reset', (req, res) => {
   res.json({ message: '모든 테스트 데이터와 오피스가 깨끗하게 초기화되었습니다.' });
 });
 
-// Windows 탐색기로 결과물 폴더 직접 열기
+// Windows 탐색기로 결과물 폴더 직접 열기 (특정 프로젝트 폴더 지정 지원)
 app.post('/api/workspace/open-folder', (req, res) => {
-  exec(`explorer.exe "${WORKSPACE_DIR}"`);
-  res.json({ message: '탐색기로 폴더가 열렸습니다.', path: WORKSPACE_DIR });
+  const { projectId } = req.body || {};
+  let targetDir = WORKSPACE_DIR;
+  if (projectId) {
+    const projDir = path.resolve(PROJECTS_DIR, path.basename(projectId));
+    if (fs.existsSync(projDir)) targetDir = projDir;
+  }
+  exec(`explorer.exe "${targetDir}"`);
+  res.json({ message: '탐색기로 폴더가 열렸습니다.', path: targetDir });
 });
 
-// 기본 프로그램으로 파일 열기
+// 기본 프로그램으로 파일 열기 (프로젝트 경로 지원)
 app.post('/api/workspace/launch-file', (req, res) => {
-  const { name } = req.body;
-  if (!name) return res.status(400).json({ error: '파일명이 필요합니다.' });
-  const filePath = path.join(WORKSPACE_DIR, path.basename(name));
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: '파일이 없습니다.' });
+  const { name, path: reqPath } = req.body || {};
+  const target = reqPath || name;
+  if (!target) return res.status(400).json({ error: '파일명이나 경로가 필요합니다.' });
+
+  const cleanTarget = target.replace(/^[/\\]+/, '').replace(/\.\./g, '');
+  let filePath = path.resolve(WORKSPACE_DIR, cleanTarget);
+  if (!fs.existsSync(filePath)) {
+    filePath = path.join(WORKSPACE_DIR, path.basename(target));
+  }
+  if (!fs.existsSync(filePath) || !filePath.startsWith(WORKSPACE_DIR)) {
+    return res.status(404).json({ error: '파일이 없습니다.' });
+  }
 
   exec(`start "" "${filePath}"`);
-  res.json({ message: '파일이 기본 프로그램으로 실행되었습니다.' });
+  res.json({ message: '파일이 기본 프로그램으로 실행되었습니다.', path: filePath });
+});
+
+// 📁 프로젝트별 산출물 목록 조회 API
+app.get('/api/projects', async (req, res) => {
+  try {
+    const projects = await listProjectsWithArtifacts();
+    res.json({ projects, workspaceDir: WORKSPACE_DIR, projectsDir: PROJECTS_DIR });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Agent Registry API
@@ -193,46 +222,64 @@ app.post('/api/agent/run', async (req, res) => {
 app.get('/api/workspace/files', async (req, res) => {
   try {
     if (!fs.existsSync(WORKSPACE_DIR)) {
-      return res.json({ files: [], path: WORKSPACE_DIR });
+      return res.json({ files: [], projects: [], path: WORKSPACE_DIR });
     }
+    const projects = await listProjectsWithArtifacts();
     const files = await fs.promises.readdir(WORKSPACE_DIR);
-    // 내부 상태 저장용 파일(meeting_minutes.json 등)은 사용자 산출물 목록에서 제외
-    const visibleFiles = files.filter((f) => f !== 'meeting_minutes.json' && !f.startsWith('.'));
+    // 내부 상태 저장용 파일 및 projects 폴더 제외
+    const visibleFiles = files.filter(
+      (f) => f !== 'meeting_minutes.json' && f !== '회의록_최신.md' && f !== 'projects' && !f.startsWith('.')
+    );
     const details = await Promise.all(
       visibleFiles.map(async (name) => {
         const filePath = path.join(WORKSPACE_DIR, name);
         const stat = await fs.promises.stat(filePath);
         return {
           name,
+          relPath: name,
           size: stat.size,
           updatedAt: stat.mtime
         };
       })
     );
     details.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-    res.json({ files: details, path: WORKSPACE_DIR });
+    res.json({ files: details, projects, path: WORKSPACE_DIR });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 app.get('/api/workspace/file', async (req, res) => {
-  const filename = req.query.name;
+  const reqTarget = req.query.path || req.query.name;
   const renderMode = req.query.render;
-  if (!filename) {
-    return res.status(400).json({ error: '파일명이 필요합니다.' });
+  if (!reqTarget) {
+    return res.status(400).json({ error: '파일 경로 또는 파일명이 필요합니다.' });
   }
-  const filePath = path.join(WORKSPACE_DIR, path.basename(filename));
+
+  const cleanTarget = reqTarget.replace(/^[/\\]+/, '').replace(/\.\./g, '');
+  let filePath = path.resolve(WORKSPACE_DIR, cleanTarget);
   if (!fs.existsSync(filePath)) {
+    filePath = path.join(WORKSPACE_DIR, path.basename(reqTarget));
+  }
+  if (!fs.existsSync(filePath) || !filePath.startsWith(WORKSPACE_DIR)) {
     return res.status(404).json({ error: '파일을 찾을 수 없습니다.' });
   }
+
   const content = await fs.promises.readFile(filePath, 'utf-8');
-  if (renderMode === 'html' || filename.endsWith('.html') && req.headers.accept && req.headers.accept.includes('text/html')) {
+  if (
+    renderMode === 'html' ||
+    (filePath.endsWith('.html') && req.headers.accept && req.headers.accept.includes('text/html'))
+  ) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     return res.send(content);
   }
-  res.json({ name: filename, content, fullPath: filePath });
+  res.json({
+    name: path.basename(filePath),
+    relPath: path.relative(WORKSPACE_DIR, filePath).replace(/\\/g, '/'),
+    content,
+    fullPath: filePath
+  });
 });
 
 const PORT = process.env.PORT || 4000;
