@@ -19,8 +19,11 @@ import {
 import { getAgentsRegistry, addCustomAgent, removeCustomAgent } from './agentRegistry.js';
 import { getMeetingState, resolveDecision, resetMeetingState } from './meetingManager.js';
 import {
+  ROOT_DIR,
   WORKSPACE_DIR,
   PROJECTS_DIR,
+  CORE_SYSTEM_ID,
+  isForbiddenSystemPath,
   listProjectsWithArtifacts,
   ensureProjectsDir
 } from './projectManager.js';
@@ -119,11 +122,13 @@ app.post('/api/office/reset', (req, res) => {
   res.json({ message: '모든 테스트 데이터와 오피스가 깨끗하게 초기화되었습니다.' });
 });
 
-// Windows 탐색기로 결과물 폴더 직접 열기 (특정 프로젝트 폴더 지정 지원)
+// Windows 탐색기로 결과물 폴더 직접 열기 (코어시스템 소스코드 폴더 및 개별 프로젝트 폴더 지원)
 app.post('/api/workspace/open-folder', (req, res) => {
   const { projectId } = req.body || {};
   let targetDir = WORKSPACE_DIR;
-  if (projectId) {
+  if (projectId === CORE_SYSTEM_ID || projectId === 'core_system') {
+    targetDir = ROOT_DIR;
+  } else if (projectId) {
     const projDir = path.resolve(PROJECTS_DIR, path.basename(projectId));
     if (fs.existsSync(projDir)) targetDir = projDir;
   }
@@ -131,7 +136,7 @@ app.post('/api/workspace/open-folder', (req, res) => {
   res.json({ message: '탐색기로 폴더가 열렸습니다.', path: targetDir });
 });
 
-// 기본 프로그램으로 파일 열기 (프로젝트 경로 지원)
+// 기본 프로그램으로 파일 열기 (프로젝트 경로 및 코어 소스코드 경로 지원)
 app.post('/api/workspace/launch-file', (req, res) => {
   const { name, path: reqPath } = req.body || {};
   const target = reqPath || name;
@@ -139,10 +144,17 @@ app.post('/api/workspace/launch-file', (req, res) => {
 
   const cleanTarget = target.replace(/^[/\\]+/, '').replace(/\.\./g, '');
   let filePath = path.resolve(WORKSPACE_DIR, cleanTarget);
+
   if (!fs.existsSync(filePath)) {
-    filePath = path.join(WORKSPACE_DIR, path.basename(target));
+    const rootCandidate = path.resolve(ROOT_DIR, cleanTarget);
+    if (!isForbiddenSystemPath(rootCandidate) && fs.existsSync(rootCandidate)) {
+      filePath = rootCandidate;
+    } else {
+      filePath = path.join(WORKSPACE_DIR, path.basename(target));
+    }
   }
-  if (!fs.existsSync(filePath) || !filePath.startsWith(WORKSPACE_DIR)) {
+
+  if (!fs.existsSync(filePath)) {
     return res.status(404).json({ error: '파일이 없습니다.' });
   }
 
@@ -258,11 +270,18 @@ app.get('/api/workspace/file', async (req, res) => {
 
   const cleanTarget = reqTarget.replace(/^[/\\]+/, '').replace(/\.\./g, '');
   let filePath = path.resolve(WORKSPACE_DIR, cleanTarget);
+
   if (!fs.existsSync(filePath)) {
-    filePath = path.join(WORKSPACE_DIR, path.basename(reqTarget));
+    const rootCandidate = path.resolve(ROOT_DIR, cleanTarget);
+    if (!isForbiddenSystemPath(rootCandidate) && fs.existsSync(rootCandidate)) {
+      filePath = rootCandidate;
+    } else {
+      filePath = path.join(WORKSPACE_DIR, path.basename(reqTarget));
+    }
   }
-  if (!fs.existsSync(filePath) || !filePath.startsWith(WORKSPACE_DIR)) {
-    return res.status(404).json({ error: '파일을 찾을 수 없습니다.' });
+
+  if (isForbiddenSystemPath(filePath) || !fs.existsSync(filePath)) {
+    return res.status(404).json({ error: '파일을 찾을 수 없거나 보호된 시스템 파일입니다.' });
   }
 
   const content = await fs.promises.readFile(filePath, 'utf-8');
@@ -276,7 +295,7 @@ app.get('/api/workspace/file', async (req, res) => {
   }
   res.json({
     name: path.basename(filePath),
-    relPath: path.relative(WORKSPACE_DIR, filePath).replace(/\\/g, '/'),
+    relPath: path.relative(ROOT_DIR, filePath).replace(/\\/g, '/'),
     content,
     fullPath: filePath
   });

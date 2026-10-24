@@ -569,7 +569,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* 프로젝트 선택 탭 (Project Selector) */}
+            {/* 프로젝트 선택 탭 (Project Selector) - 🌟 코어시스템 무조건 맨 앞 배치 */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
               <button
                 onClick={() => setSelectedProjectId('all')}
@@ -581,20 +581,34 @@ export default function App() {
               >
                 전체 프로젝트 ({projects.length})
               </button>
-              {projects.map((proj) => (
-                <button
-                  key={proj.id}
-                  onClick={() => setSelectedProjectId(proj.id)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
-                    selectedProjectId === proj.id
-                      ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
-                      : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-                  }`}
-                >
-                  <span>📁</span>
-                  <span>{proj.name || proj.id}</span>
-                </button>
-              ))}
+              {projects.map((proj) => {
+                const isCore = proj.id === 'core_system' || (proj as any).isCoreSystem;
+                const isSelected = selectedProjectId === proj.id;
+
+                return (
+                  <button
+                    key={proj.id}
+                    onClick={() => setSelectedProjectId(proj.id)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
+                      isSelected
+                        ? isCore
+                          ? 'bg-purple-600 text-white shadow-md shadow-purple-600/40 ring-1 ring-purple-400'
+                          : 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                        : isCore
+                        ? 'bg-purple-950/70 text-purple-300 hover:text-white border border-purple-800/80'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    <span>{isCore ? '⚡' : '📁'}</span>
+                    <span>{proj.name || proj.id}</span>
+                    {isCore && (
+                      <span className="text-[9px] bg-purple-500 text-white font-bold px-1 py-0.2 rounded font-sans">
+                        코어
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
             {/* 프로젝트 목록 및 하위 문서/앱 뷰어 */}
@@ -605,19 +619,30 @@ export default function App() {
             ) : (
               <div className="flex flex-col gap-3 max-h-[460px] overflow-y-auto pr-1">
                 {(selectedProjectId === 'all' ? projects : projects.filter((p) => p.id === selectedProjectId)).map((proj) => {
+                  const isCore = proj.id === 'core_system' || (proj as any).isCoreSystem;
+
                   return (
                     <div
                       key={proj.id}
-                      className="rounded-lg border border-slate-800/90 bg-slate-900/60 p-3 flex flex-col gap-2.5 hover:border-slate-700 transition"
+                      className={`rounded-lg border p-3 flex flex-col gap-2.5 transition ${
+                        isCore
+                          ? 'border-purple-800/70 bg-purple-950/20 hover:border-purple-600/80 shadow-lg shadow-purple-950/30'
+                          : 'border-slate-800/90 bg-slate-900/60 hover:border-slate-700'
+                      }`}
                     >
                       {/* 프로젝트 요약 헤더 */}
                       <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                         <div className="truncate mr-2">
-                          <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5 truncate">
-                            <span className="font-mono text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-400 font-normal">
-                              {proj.id}
+                          <div className={`text-xs font-bold flex items-center gap-1.5 truncate ${isCore ? 'text-purple-300' : 'text-amber-300'}`}>
+                            <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded font-normal ${isCore ? 'bg-purple-900/60 text-purple-200 border border-purple-700/60' : 'bg-slate-800 text-slate-400'}`}>
+                              {isCore ? '코어시스템' : proj.id}
                             </span>
                             <span>{proj.name}</span>
+                            {isCore && (
+                              <span className="text-[9px] bg-purple-600 text-white font-bold px-1.5 py-0.2 rounded">
+                                자체 진화 & 유지보수
+                              </span>
+                            )}
                           </div>
                           <div className="text-[10px] text-slate-400 truncate mt-0.5">
                             {proj.description}
@@ -625,11 +650,15 @@ export default function App() {
                         </div>
                         <button
                           onClick={() => handleOpenFolder(proj.id)}
-                          className="text-[10px] text-slate-400 hover:text-amber-300 px-2 py-0.5 rounded border border-slate-700/80 hover:border-amber-500/50 flex items-center gap-1 shrink-0 cursor-pointer bg-slate-900"
-                          title="이 프로젝트 폴더만 탐색기로 열기"
+                          className={`text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 shrink-0 cursor-pointer ${
+                            isCore
+                              ? 'border-purple-700 text-purple-300 hover:text-white bg-purple-950/80 hover:bg-purple-900'
+                              : 'border-slate-700/80 text-slate-400 hover:text-amber-300 bg-slate-900'
+                          }`}
+                          title={isCore ? '2D_AI_AGENT 프로그램 소스코드 전체 폴더 열기' : '이 프로젝트 폴더만 탐색기로 열기'}
                         >
-                          <FolderOpen className="w-3 h-3 text-amber-400" />
-                          <span>폴더 열기</span>
+                          <FolderOpen className={`w-3 h-3 ${isCore ? 'text-purple-400' : 'text-amber-400'}`} />
+                          <span>{isCore ? '소스코드 폴더 열기' : '폴더 열기'}</span>
                         </button>
                       </div>
 
@@ -637,43 +666,60 @@ export default function App() {
                       {proj.files.apps && proj.files.apps.length > 0 && (
                         <div className="flex flex-col gap-1.5">
                           <div className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
-                            <Gamepad2 className="w-3.5 h-3.5 text-amber-400" />
-                            <span>실행 웹앱 / 게임</span>
+                            <Gamepad2 className={`w-3.5 h-3.5 ${isCore ? 'text-purple-400' : 'text-amber-400'}`} />
+                            <span>{isCore ? '가동 중인 플랫폼 시스템' : '실행 웹앱 / 게임'}</span>
                           </div>
                           {proj.files.apps.map((app) => (
                             <div
                               key={app.relPath}
-                              className="flex items-center justify-between p-2 rounded bg-amber-950/20 border border-amber-500/40 hover:bg-amber-950/30 transition"
+                              className={`flex items-center justify-between p-2 rounded border transition ${
+                                isCore
+                                  ? 'bg-purple-950/30 border-purple-600/40 hover:bg-purple-950/50'
+                                  : 'bg-amber-950/20 border-amber-500/40 hover:bg-amber-950/30'
+                              }`}
                             >
                               <div
-                                onClick={() => handleViewFile(app.relPath)}
+                                onClick={() => isCore ? window.open('http://localhost:5173', '_blank') : handleViewFile(app.relPath)}
                                 className="flex items-center gap-2 truncate flex-1 cursor-pointer mr-2"
                               >
-                                <FileCode className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                <FileCode className={`w-3.5 h-3.5 shrink-0 ${isCore ? 'text-purple-400' : 'text-amber-400'}`} />
                                 <div className="truncate">
-                                  <div className="text-xs font-mono font-bold text-amber-200 truncate flex items-center gap-1.5">
+                                  <div className={`text-xs font-mono font-bold truncate flex items-center gap-1.5 ${isCore ? 'text-purple-200' : 'text-amber-200'}`}>
                                     <span>{app.name}</span>
-                                    <span className="text-[9px] bg-amber-500 text-slate-950 font-bold px-1.5 py-0.2 rounded font-sans">
-                                      실행 가능
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded font-sans ${isCore ? 'bg-emerald-500 text-slate-950' : 'bg-amber-500 text-slate-950'}`}>
+                                      {isCore ? '실시간 가동 중' : '실행 가능'}
                                     </span>
                                   </div>
                                   <div className="text-[10px] text-slate-400">
-                                    {(app.size / 1024).toFixed(1)} KB • {new Date(app.updatedAt).toLocaleTimeString()}
+                                    {isCore ? 'Vite HMR 무중단 핫 리로드 지원' : `${(app.size / 1024).toFixed(1)} KB • ${new Date(app.updatedAt).toLocaleTimeString()}`}
                                   </div>
                                 </div>
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
+                                {!isCore && (
+                                  <button
+                                    onClick={(e) => handlePlayGame(app.relPath, proj.name, e)}
+                                    className="text-[11px] font-bold text-amber-300 hover:text-white px-2.5 py-1 bg-amber-600/40 hover:bg-amber-600 rounded border border-amber-500/60 transition flex items-center gap-1 cursor-pointer"
+                                    title="대시보드 안에서 즉시 실행"
+                                  >
+                                    <Play className="w-3 h-3 fill-current" />
+                                    <span>실행하기</span>
+                                  </button>
+                                )}
                                 <button
-                                  onClick={(e) => handlePlayGame(app.relPath, proj.name, e)}
-                                  className="text-[11px] font-bold text-amber-300 hover:text-white px-2.5 py-1 bg-amber-600/40 hover:bg-amber-600 rounded border border-amber-500/60 transition flex items-center gap-1 cursor-pointer"
-                                  title="대시보드 안에서 즉시 실행"
-                                >
-                                  <Play className="w-3 h-3 fill-current" />
-                                  <span>실행하기</span>
-                                </button>
-                                <button
-                                  onClick={(e) => handleLaunchFile(app.relPath, e)}
-                                  className="text-[11px] text-slate-400 hover:text-white px-2 py-1 bg-slate-800 hover:bg-indigo-600 rounded border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                                  onClick={(e) => {
+                                    if (isCore) {
+                                      if (e) e.stopPropagation();
+                                      window.open('http://localhost:5173', '_blank');
+                                    } else {
+                                      handleLaunchFile(app.relPath, e);
+                                    }
+                                  }}
+                                  className={`text-[11px] hover:text-white px-2 py-1 rounded border transition flex items-center gap-1 cursor-pointer ${
+                                    isCore
+                                      ? 'bg-purple-900/60 text-purple-200 hover:bg-purple-600 border-purple-700'
+                                      : 'bg-slate-800 text-slate-400 hover:bg-indigo-600 border-slate-700'
+                                  }`}
                                   title="새 창으로 열기"
                                 >
                                   <ExternalLink className="w-3 h-3" />

@@ -1,0 +1,10 @@
+{
+  "id": "core_system",
+  "name": "코어시스템",
+  "description": "2D AI 에이전트 오피스 플랫폼 자체 소스코드 및 시스템 아키텍처 (자체 진화 및 유지보수)",
+  "category": "core_system",
+  "entrypoint": "frontend/src/App.tsx",
+  "isCoreSystem": true,
+  "createdAt": "2026-10-24T00:00:00.000Z",
+  "updatedAt": "2026-10-24T23:30:25.014Z"
+}

@@ -3,9 +3,12 @@ import path from 'path';
 import { exec } from 'child_process';
 import util from 'util';
 import {
+  ROOT_DIR,
   WORKSPACE_DIR,
   PROJECTS_DIR,
   PUBLIC_DIR,
+  CORE_SYSTEM_ID,
+  isForbiddenSystemPath,
   listProjectsWithArtifacts,
   writeProjectArtifact,
   readProjectArtifact,
@@ -16,12 +19,30 @@ const execPromise = util.promisify(exec);
 ensureProjectsDir();
 
 /**
- * 🔍 파일 경로 해석 헬퍼 (프로젝트 내부 경로, projects/ 상대경로, 루트 파일 완전 호환)
+ * 🔍 파일 경로 해석 헬퍼 (프로젝트 내부 경로, projects/ 상대경로, 코어시스템 소스코드 완전 호환)
  */
 function resolveSafeFilePath(filename, projectId = null) {
   if (!filename) return null;
   const clean = filename.replace(/^[/\\]+/, '').replace(/\.\./g, '');
 
+  // 1. 코어시스템(core_system) 전용 경로 해석
+  if (projectId === CORE_SYSTEM_ID || projectId === 'core_system') {
+    if (clean.startsWith('docs/') || clean.endsWith('.md') || clean.startsWith('data/')) {
+      return path.resolve(PROJECTS_DIR, CORE_SYSTEM_ID, clean);
+    }
+    if (clean.startsWith('src/')) {
+      return path.resolve(ROOT_DIR, 'frontend', clean);
+    }
+    const directRoot = path.resolve(ROOT_DIR, clean);
+    if (fs.existsSync(directRoot)) return directRoot;
+    const feCandidate = path.resolve(ROOT_DIR, 'frontend', clean);
+    if (fs.existsSync(feCandidate)) return feCandidate;
+    const beCandidate = path.resolve(ROOT_DIR, 'backend', clean);
+    if (fs.existsSync(beCandidate)) return beCandidate;
+    return directRoot;
+  }
+
+  // 2. 일반 프로젝트 경로 해석
   if (projectId) {
     const projSafe = path.resolve(PROJECTS_DIR, path.basename(projectId), clean);
     if (projSafe.startsWith(PROJECTS_DIR)) return projSafe;
@@ -224,6 +245,13 @@ export const realAgentTools = {
           issues.push(`[UI 결함] #${i + 1}번째 <button> 태그 내부에 표시될 텍스트가 비어 있습니다.`);
         }
       });
+    } else if (ext === '.ts' || ext === '.tsx' || (projectId === CORE_SYSTEM_ID && safePath.includes('frontend'))) {
+      // 🌟 [코어시스템 안전 조치]: 실제 Vite / TypeScript 컴파일 빌드 무결성 검증!
+      const checkRes = await this.run_command({ command: 'npm run build --prefix frontend' });
+      if (checkRes.error || (checkRes.stderr && !checkRes.stdout.includes('built in'))) {
+        const errorOut = (checkRes.stdout || checkRes.stderr || checkRes.error).replace(/\r?\n/g, ' ');
+        issues.push(`[코어시스템 TypeScript 빌드 오류] ${errorOut.slice(0, 400)}`);
+      }
     } else if (ext === '.js' || ext === '.mjs') {
       try {
         new Function(content);

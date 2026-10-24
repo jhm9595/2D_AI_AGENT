@@ -859,12 +859,11 @@ ${JSON.stringify(existingProjectBriefs, null, 2)}
 ---
 ### 🧭 PM Agent (Router) 핵심 지침:
 1. **[프로젝트 자동 식별 및 분류 (Project Auto-Triage)]**:
-   - 사용자 지시가 기존 프로젝트(예: 한국의 술 도감 등)와 관련된 것인지, 아니면 새로운 프로젝트 제작 요청인지 판단하세요.
-   - \`"projectId"\`: 기존 프로젝트 작업이면 기존 ID (예: "ksool_game"), 완전히 새로운 프로젝트면 영문 소문자 snake_case 식별자 (예: "runner_action_game", "brick_breaker", "todo_app", "portfolio_web")
-   - \`"projectName"\`: 프로젝트 한글 명칭 (예: "한국의 술 도감 게임", "2D 러닝 액션 게임")
-   - \`"projectDescription"\`: 프로젝트 핵심 설명
-   - \`"isNewProject"\`: 신규 프로젝트 여부 (true / false)
-   - \`"targetFilename"\`: 프로젝트 메인 실행 파일 (기본값: "index.html")
+   - 🌟 **코어시스템 (core_system / 코어시스템) 분기 규칙**:
+     사용자의 요청이 **우리가 현재 사용하는 2D AI 에이전트 프로그램 자체**(예: 2D 오피스 화면에 커피머신/가구/휴게실 추가, 대시보드 UI/스타일 변경, 에이전트 추가/관리 기능 확장, 백엔드 API/이벤트 추가, 회의록 다운로드 등)를 개선하거나 수정하는 작업일 때는 **무조건 projectId: "core_system", projectName: "코어시스템"으로 분류**하세요!
+     이 경우 targetFilename은 수정 대상 실제 소스코드 경로(예: "frontend/src/App.tsx", "frontend/src/canvas/OfficeMap.ts", "backend/server.js" 등)로 지정하세요.
+   - **일반 프로젝트 분기 규칙**:
+     독립적인 외부 게임, 웹앱, 서비스(예: "한국의 술 도감 게임", "2D 러닝 게임", "계산기", "투두앱" 등)를 제작/수정하는 작업일 때는 해당 프로젝트 id (예: "ksool_game") 또는 신규 snake_case id를 지정하세요. (기본 targetFilename: "index.html")
 
 2. **[Request Triage: Impact / Scope / Type]**:
    - \`"NEW_FEATURE_SPEC"\`: 신규 프로젝트 생성, 신규 기능 추가, 기획/스펙 변경 ➔ **Planner Agent (PRD)** 및 **Security Agent [Gate 1: Threat Modeling]**을 거침!
@@ -1650,7 +1649,14 @@ ${
   }
 
   if (updatedCode) {
-    if (sharedContracts?.projectId) {
+    if (sharedContracts?.projectId === 'core_system') {
+      // 🌟 코어시스템 소스코드 직접 수정 반영
+      await realAgentTools.write_file({
+        filename: resolvedFile,
+        projectId: 'core_system',
+        content: updatedCode
+      });
+    } else if (sharedContracts?.projectId) {
       await realAgentTools.write_file({
         filename: 'index.html',
         projectId: sharedContracts.projectId,
